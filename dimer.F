@@ -48,7 +48,7 @@
       TYPE(in_struct) :: IO
       TYPE(type_info) :: T_INFO
 
-      EXTERNAL RMARIN
+      !EXTERNAL RMARIN
 
       DINFO = T_INFO
       IU0 = IO%IU0
@@ -65,7 +65,7 @@
       ALLOCATE(N(3,Nions),R(3,Nions),R0(3,Nions),Feff(3,Nions))
       ALLOCATE(F(3,Nions),F0(3,Nions),F1(3,Nions),F2(3,Nions))
       ALLOCATE(FN(3,Nions),FNold(3,Nions),GN(3,Nions),GNu(3,Nions))
-      IF (Seed/=0) CALL RMARIN(Seed,Seed)
+      !IF (Seed/=0) CALL RMARIN(Seed,Seed)
       CALL ReadDimerVar()
       InitFlag = .TRUE.
 
@@ -204,7 +204,8 @@
 ! Read or generate the initial lowest mode
 
     SUBROUTINE InitMode()
-      REAL(q),EXTERNAL :: RANG
+      USE random_seeded, ONLY: RANG
+      !REAL(q),EXTERNAL :: RANG
       IF (IU6>=0) WRITE(IU6,*) 'Dimer: Init Mode:'
       ! If the MODECAR file exists, read N, otherwise use random N
       INQUIRE(FILE='MODECAR', EXIST=ModecarFlag)

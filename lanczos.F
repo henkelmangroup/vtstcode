@@ -41,11 +41,12 @@
 !--------------------------------------------------------------------------------------!
 
     SUBROUTINE lanczos_step(optflag,posion,toten,tifor,latt_a,latt_b)
+      USE random_seeded, ONLY: RANG
       LOGICAL :: optflag
       REAL(q),DIMENSION(3,nions) :: posion,tifor 
       REAL(q),DIMENSION(3,3) :: latt_a,latt_b
       REAL(q) :: toten
-      REAL(q),EXTERNAL :: rang
+      !REAL(q),EXTERNAL :: rang
 
       REAL(q),DIMENSION(3,3) :: A,B
       REAL(q),SAVE :: alpha,beta,eigold,eig
@@ -310,9 +311,10 @@
 !------------------------------------------------------------------------------------!
 
     SUBROUTINE eigenvector(il,eig)
+      USE random_seeded, ONLY: RANG
       INTEGER,INTENT(IN) :: il
       REAL(q),INTENT(IN) :: eig
-      REAL(q),EXTERNAL :: rang
+      !REAL(q),EXTERNAL :: rang
  
       INTEGER :: i
       REAL(q) :: shift,t

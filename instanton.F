@@ -54,11 +54,12 @@
 !**********************************************************************
 
     SUBROUTINE instanton_step(optflag,posion,toten,tifor,ina,inb)
+      USE random_seeded, ONLY: RANE
       LOGICAL :: optflag
       REAL(q) :: toten
       REAL(q),DIMENSION(3,nions) :: posion,tifor
       REAL(q),DIMENSION(3,3) :: ina,inb
-      REAL(q),EXTERNAL :: rane
+      !REAL(q),EXTERNAL :: rane
 
 #if defined(MPI) || defined(MPI_CHAIN)
 
@@ -204,9 +205,10 @@
 !**********************************************************************
 
     SUBROUTINE instanton_init(t_info,io)
+      USE random_seeded, ONLY: RANE
       TYPE (in_struct) :: io
       TYPE (type_info) :: t_info
-      REAL(q),EXTERNAL :: rane
+      !REAL(q),EXTERNAL :: rane
 
 ! Local variables
       INTEGER :: IDUM,IERR,Nint,k1,k2,i,j,im,k
