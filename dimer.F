@@ -192,9 +192,21 @@
 
 ! Dimer cleanup routine
 
-    SUBROUTINE Dimer_Fin()
+    SUBROUTINE Dimer_Fin(POSION, LATT_A, LATT_B)
+      REAL(q),DIMENSION(3,NIONS) :: POSION
+      REAL(q),DIMENSION(3,3) :: LATT_A, LATT_B
+
       IF (IU6>=0) WRITE(IUdim,'(I5,F14.5,7x,A3,4x,F14.5,7x,A3,11x,A3,4x)') &
       &  Itr,F0r,'---',U0,'---','---'
+      ! Write CENTCAR
+      POSION = R0
+      CALL KARDIR(NIONS, POSION, LATT_B)
+      IF (IU6>=0) THEN
+        OPEN(UNIT=IUcent, FILE='CENTCAR', STATUS='UNKNOWN')
+        CALL OUTCENT(IUcent, .TRUE., DINFO%SZNAM2, DINFO, 1._q, A, DINFO%NTYP, &
+                  & DINFO%NITYP, DINFO%LSDYN, DINFO%NIONS, POSION, DINFO%LSFOR)
+        CLOSE(IUcent)
+      END IF
     END SUBROUTINE Dimer_Fin
 
 !**********************************************************************

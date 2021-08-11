@@ -375,7 +375,7 @@
             ! GH: remove any finite difference steps taken by dimer or lan
             IF (ICHAIN==2 .OR. ICHAIN==3)  posion=posion_vasp
             IF (ICHAIN==2) THEN
-              CALL dimer_fin()
+              CALL dimer_fin(posion,a,b)
             ENDIF
           ENDIF
         ENDIF
