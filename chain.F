@@ -874,7 +874,7 @@
       IU6 = IO%IU6
 
       ! write the version number
-      IF(IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.1, (05/19/21)'
+      IF(IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.2, (08/11/21)'
 
       IF(IU6>=0) WRITE(IU6,*) 'CHAIN: initializing optimizer'
 
