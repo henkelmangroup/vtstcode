@@ -15,8 +15,9 @@
     USE bfgs
     USE sd
     USE fire
+    USE ML_PyAMFF
 !    USE dynamic
-
+    
     IMPLICIT NONE
     PRIVATE
     PUBLIC :: opt_step, opt_init  ! call opt_init from chain_init
@@ -28,10 +29,14 @@
 !**********************************************************************
 
   CONTAINS
-    SUBROUTINE opt_step(optflag,posion,toten,force,hstress,latt_a,latt_b)
+    SUBROUTINE opt_step(optflag,posion,toten,force,hstress,latt_a,latt_b,ml_turnoff,Free,ml_chain_iter)
       REAL(q) :: posion(3,nions),toten,force(3,nions)
       REAL(q) :: hstress(3,3),latt_a(3,3),latt_b(3,3)
+      REAL(q) :: Free(3,nions)
       LOGICAL optflag
+      !ML-PyAMFF
+      LOGICAL ml_turnoff
+      INTEGER :: ml_chain_iter
 
       ! if optflag is false, do nothing
       IF (iu6>=0) WRITE(iu6,*) ''
@@ -39,8 +44,10 @@
       IF (.NOT. optflag) RETURN
 
       IF (iopt==1) THEN
+        ml_turnoff=.TRUE.
         IF(iu6>=0) WRITE(iu6,*) 'OPT: LBFGS Step'
-        CALL lbfgs_step(optflag,posion,toten,force,latt_a,latt_b)
+        !CALL lbfgs_step(optflag,posion,toten,force,latt_a,latt_b)
+        CALL lbfgs_step(optflag,posion,toten,force,latt_a,latt_b,ml_turnoff)
       ELSEIF (iopt==2) THEN
         IF (iu6>=0) WRITE(iu6,*) 'OPT: CG Step'
         CALL cg_step(optflag,posion,toten,force,latt_a,latt_b)
@@ -59,6 +66,17 @@
       ELSEIF (iopt==7) THEN
         IF (iu6>=0) WRITE(iu6,*) 'OPT: FIRE Step'
         CALL fire_step(optflag,posion,toten,force,hstress,latt_a,latt_b)
+      ELSEIF (iopt==8) THEN
+        IF (iu6>=0) WRITE(iu6,*) 'OPT: ML-PyAMFF Step'
+        IF (ml_turnoff) THEN
+          IF (iu6>=0) WRITE(iu6,*) 'OPT: Near minima, ML-PyAMFF is switched to LBFGS'
+          CALL lbfgs_step(optflag,posion,toten,force,latt_a,latt_b,ml_turnoff)
+        ELSE
+          ! Track DFT forces (ml_chain_iter=1) for switching over later 
+          IF (ml_chain_iter == 1) CALL lbfgs_step(optflag,posion,toten,force,latt_a,latt_b,ml_turnoff)
+          CALL ML_PyAMFF_step(optflag,posion,toten,force,hstress,latt_a,latt_b,&
+            Free)
+        END IF
       ENDIF
 
 ! Put atoms back inside box
@@ -81,12 +99,13 @@
       COMPLEX(q) CDUM
       LOGICAL LDUM
       REAL(q) RDUM,potim
+      !ML_PYAMFF
 
       iu0=IO%IU0
       iu6=IO%IU6
-
+      
       ! read iopt (0=use vasp optimizers,
-      !    1=lbfgs, 2=cg, 3=qm, 4=sd, 5=bfgs, 6=md, 7=fire)
+      !    1=lbfgs, 2=cg, 3=qm, 4=sd, 5=bfgs, 6=md, 7=fire, 8=ml_pyamff)
 
       iopt = 0
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'IOPT','=','#',';','I', &
@@ -140,8 +159,11 @@
         IF (iu6>=0) WRITE(iu6,*) 'OPT: Verlet Dynamics'
       ELSEIF (iopt.EQ.7) THEN
         IF (iu6>=0) WRITE(iu6,*) 'OPT: Using FIRE optimizer'
+      ELSEIF (iopt.EQ.8) THEN
+        IF (iu6>=0) WRITE(iu6,*) 'OPT: Using ML-PyAMFF optimizer'
       ENDIF
 
+      
       IF(potim/=0 .OR. ibrion/=3) THEN
         IF (iu6>=0) WRITE(iu6,*) 'OPT: Must set IBRION=3 and POTIM=0 for IOPT>0'
         STOP
@@ -170,6 +192,14 @@
       ELSEIF (iopt==7) THEN
         IF (iu6>=0) WRITE(iu6,*) 'OPT: FIRE, Init'
         CALL fire_init(T_INFO,IO)
+      ELSEIF (iopt==8) THEN
+        IF (iu6>=0) WRITE(iu6,*) 'OPT: ML-PyAMFF, Init'
+        CALL ML_PyAMFF_init(T_INFO,IO)
+        CALL qm_init(T_INFO,IO)
+        !CALL fire_init(T_INFO,IO)
+        CALL lbfgs_init(T_INFO,IO)
+        IO%MDOUT=100
+        IO%PESOUT=101
       ENDIF
       IF (iu6>=0) WRITE(iu6,*) ''
 

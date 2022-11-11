@@ -46,12 +46,14 @@
     USE bbm
     USE instanton
     USE opt
+    USE ML_PyAMFF, only: ML_PyAMFF_train, ML_PyAMFF_step, ML_PyAMFF_cleanup, ml_pes
+    USE PyAMFF, only: final_epoch
 
     IMPLICIT NONE
     SAVE
     PRIVATE
     PUBLIC :: chain_force, chain_init, parallel_tempering
-    PUBLIC :: Sum_Chain, And_Chain, LHYPER_NUDGE
+    PUBLIC :: Sum_Chain, And_Chain, LHYPER_NUDGE, ML_chain_criteria
     INTEGER mpmd_client_rank
 #ifdef EAM
     PRIVATE :: EAMForce
@@ -61,7 +63,7 @@
     LOGICAL :: sconverge, cell_flag, twodim_flag
     REAL(q) :: EDIFFG_local, ftot_val, jacobian, PSTRESS_local
     REAL(q),ALLOCATABLE :: Free(:,:)
-
+    
 #ifdef EAM
     ! Variables used for calling the EAM potential (testing)
     LOGICAL :: eaminit
@@ -99,8 +101,11 @@
     INTEGER, ALLOCATABLE, SAVE :: ATTEMPTS(:)
     INTEGER, ALLOCATABLE, SAVE :: SUCCESS(:)
 !!!
-
-
+ ! ML-PYAMFF
+    INTEGER :: ml_chain_iter, max_iter
+    REAL(q) :: force_tol, SWFTOL !Switch force tolerance from ML to LBFGS
+    REAL(q) :: trustR, minmove
+    LOGICAL :: ml_turnoff, ml_chain
 !**********************************************************************
 !  General force routine for any method using the repeated image mode.
 !  The variable ICHAIN determines which method to use (see chain_init)
@@ -127,6 +132,11 @@
 
       INTEGER node
       REAL(q),ALLOCATABLE,SAVE :: force_all(:,:,:)
+
+      ! ML-optimizer
+      LOGICAL :: ml_minmove, ml_sat
+      REAL(q) :: dft_fmaxatom, ml_fmaxatom
+      REAL(q), DIMENSION(3,nions) :: force_mlreturn, force_ml, init_R
 
 #if defined(MPI) || defined (MPI_CHAIN)
       node=comm_chain%node_me
@@ -250,15 +260,57 @@
       ! optflag indicates who has control
       !  true: optimizer is active
       !  false: chain method is active (for dimer/lanczos)
-      IF (IMAGES==0 .AND. ICHAIN==0) THEN
-        optflag = .TRUE.
+     
+      ! Initialize ml_chain and ml_chain_iter
+      ml_chain_iter=0
+      ml_chain=.TRUE.
+ 
+      ! Initialize ML-optimizer flags 
+      IF ( IOPT == 8 ) THEN
+        ml_turnoff = .FALSE.
+        ml_minmove = .FALSE.
+        ml_sat = .FALSE.
+        ! Save initial posion for the user-defiend trust radius 
+        init_R = posion
       ELSE
+        ml_turnoff = .TRUE.  
+      END IF
+
+      DO WHILE (ml_chain)
+        ! Set ml_chain_iter and ml_chain
+        ! ml_chain_iter >= 1 for ml-optimizer (iopt = 8) 
+        ! ml_chain_iter = 0 otherwise 
+        IF ((IOPT == 8) .AND. (.NOT. ml_turnoff)) THEN 
+          ml_chain_iter=ml_chain_iter+1
+        ELSE 
+          ml_chain=.FALSE.
+        END IF
+
+        ! ML-optimizer: Save true force for training before taking chain-steps
+        IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) ) THEN
+          IF (ml_chain_iter == 1) THEN 
+            force_vasp=force
+          ELSE
+            ! Evaluate force on ML-PES when ml_chain_iter > 1
+            CALL ml_pes(posion,a,b,Free,force)
+          END IF
+        END IF
+
         IF (ICHAIN==0) THEN
           CALL neb_step(optflag,posion,toten,force,stress,a,b)
           !CALL neb_step(optflag,posion,toten,force,a,b)
         ELSEIF (ICHAIN==1) THEN
           CALL dynmat_step(optflag,posion,toten,force,a,b)
         ELSEIF (ICHAIN==2) THEN
+          IF (IOPT == 8) THEN
+            force_vasp=force
+            IF (ml_chain_iter > 1) THEN
+              !force_vasp=force !Update true force when ml_chain_iter > 1 
+              posion_vasp=posion
+              ! Keep turning on optflag until ml-chain becomes false
+              optflag=.TRUE.
+            END IF  
+          END IF
           CALL dimer_step(optflag,posion,toten,force,a,b)
           force_dimlan = force
         ELSEIF (ICHAIN==3) THEN
@@ -271,115 +323,203 @@
           CALL instanton_step(optflag,posion,toten,force,a,b)
 !INS_END
         ENDIF
-      ENDIF
 
-      IF (IU6>0) THEN
-        WRITE(IU6,*) "stress matrix after NEB project (eV)"
-        WRITE(IU6,'(3F13.5)') stress
-      ENDIF
-
-      ! 2D calculations (only in x,y)
-      IF (twodim_flag) THEN
-        stress(1,3) = 0._q
-        stress(2,3) = 0._q
-        stress(3,3) = 0._q
-      ENDIF
-
-      ! zero out any added forces on frozen atoms
-      ! atomic constraints in direct coordinates, thanks to Christopher Stihl
-      CALL KARDIR(NIONS, force, B)
-      force = force*Free
-      CALL DIRKAR(NIONS, force, A)
-
-      ! for dimer/lanczos, check force criteria using the vasp force
-      IF (ICHAIN==2 .OR. ICHAIN==3) THEN
-        force_dimlan = force
-        force = force_vasp
-      ENDIF
-
-      ftot = 0._q
-      fmaxatom = 0._q
-      fmaxdim = 0._q
-      DO ni = 1,nions
-        ftemp = 0._q
-        DO nj = 1,3
-          ftot = ftot + force(nj,ni)**2
-          ftemp = ftemp + force(nj,ni)**2
-          IF(fmaxdim.LT.ABS(force(nj,ni))) THEN
-            fmaxdim = ABS(force(nj,ni))
+        ! Write stress matrix for the first ml-chain loop only
+        IF (ml_chain_iter <= 1) THEN 
+          IF (IU6>0) THEN
+            WRITE(IU6,*) "stress matrix after NEB project (eV)"
+            WRITE(IU6,'(3F13.5)') stress
           ENDIF
-        ENDDO
-        IF (ftemp .GT. fmaxatom) fmaxatom = ftemp
-      ENDDO
-      frms = SQRT(ftot/REAL(nions))
-      fmaxatom = SQRT(fmaxatom)
-      IF (IU6>=0) WRITE(IU6,4693) fmaxatom,frms
- 4693 FORMAT(1x,' FORCES: max atom, RMS ',2f12.6)
-      IF (IU6>=0) WRITE(IU6,4694) SQRT(ftot),fmaxdim
- 4694 FORMAT(1x,' FORCE total and by dimension',2f12.6)
+        END IF
 
-      ! added to monitor the stress vector 
-      stot = 0._q
-      smaxdim = 0._q
-      DO ni=1,3
-        DO nj=1,3
-          stot = stot + stress(nj,ni)**2
-          IF(smaxdim .LT. ABS(stress(nj,ni))) THEN
-            smaxdim = ABS(stress(nj,ni))
-          ENDIF
-        ENDDO
-      ENDDO
- 4695 FORMAT(1x,' Stress total and by dimension',2f12.6)
-      IF (IU6>=0) WRITE(IU6,4695) SQRT(stot),smaxdim
-
-      ! for dimer/lanczos, use projected force in optimizer
-      IF (ICHAIN==2 .OR. ICHAIN==3) THEN
-        force = force_dimlan
-      ENDIF
-
-      ! stops based on the Magnitude of the Force
-      IF(ftot_flag) THEN
-        fconverge = (SQRT(ftot) .LT. ftot_val)
-        CALLMPI_C(and_chain(fconverge))
-        IF (fconverge) THEN
-          IF (IU6>=0) WRITE(IU6,*) 'CONVERGED based on Magnitude of Force'
-          STOP
+        ! 2D calculations (only in x,y)
+        IF (twodim_flag) THEN
+          stress(1,3) = 0._q
+          stress(2,3) = 0._q
+          stress(3,3) = 0._q
         ENDIF
-      ENDIF
 
-      IF (IOPT .NE. 0) THEN
-        hstress = stress
-        CALL sdotA(hstress,a)
-        ! freeze out rotation
-        hstress(2,1) = 0._q
-        hstress(3,1) = 0._q
-        hstress(3,2) = 0._q
-        hstress = hstress/jacobian
-        fconverge = (fmaxatom .LT. ABS(EDIFFG_local))
-        CALLMPI_C(and_chain(fconverge))
-        IF (.NOT. fconverge) THEN
-          ! our own optimizers (optflag: do or do not optimize)  
-          !CALL opt_step(optflag,posion,toten,force,a,b)
-          CALL opt_step(optflag,posion,toten,force,hstress,a,b)
-        ELSE
-          IF (cell_flag) THEN
-            sconverge = (smaxdim .LT. ABS(EDIFFG_local)*dble(nions))
-            CALLMPI_C(and_chain(sconverge))
+        ! zero out any added forces on frozen atoms
+        ! atomic constraints in direct coordinates, thanks to Christopher Stihl
+        CALL KARDIR(NIONS, force, B)
+        force = force*Free
+        CALL DIRKAR(NIONS, force, A)
+
+        ! for dimer/lanczos, check force criteria using the vasp force
+        IF (ICHAIN==2 .OR. ICHAIN==3) THEN
+          force_dimlan = force
+          force = force_vasp
+          !ML-optimizer only trains until optflag becomes true
+          IF (IOPT == 8 .AND. (.NOT. optflag)) ml_chain=.FALSE. 
+        ENDIF
+
+        ftot = 0._q
+        fmaxatom = 0._q
+        fmaxdim = 0._q
+        DO ni = 1,nions
+          ftemp = 0._q
+          DO nj = 1,3
+            ftot = ftot + force(nj,ni)**2
+            ftemp = ftemp + force(nj,ni)**2
+            IF(fmaxdim.LT.ABS(force(nj,ni))) THEN
+              fmaxdim = ABS(force(nj,ni))
+            ENDIF
+          ENDDO
+          IF (ftemp .GT. fmaxatom) fmaxatom = ftemp
+        ENDDO
+        frms = SQRT(ftot/REAL(nions))
+        fmaxatom = SQRT(fmaxatom)
+
+        ! Check if ML-optimizer should be turned on or not 
+        ! This check should happen when ml_chain_iter == 1 (when force is DFT chain force)
+        IF (IOPT == 8) THEN
+          IF ( (ml_chain_iter == 1) .AND. (fmaxatom .LT. SWFTOL) ) THEN
+            ml_turnoff=.TRUE.
+            ml_chain=.FALSE.
           ELSE
-            sconverge = .TRUE.
+            ml_turnoff=.FALSE.
+          END IF
+#if defined(MPI) || defined(MPI_CHAIN)
+        CALLMPI_C(and_chain(ml_turnoff))
+        CALLMPI_C(and_chain(ml_chain))
+#endif
+        END IF
+
+        ! Train ML-PES when ml_chain_iter=1 and ml_turnoff is false
+        IF ( (.NOT. ml_turnoff) .AND. (ml_chain_iter ==1)) CALL ML_PyAMFF_train(posion,toten,force_vasp,a,b,Free) 
+        
+        !For sanity check 
+!        IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) .AND. (ml_chain_iter==1)) THEN
+!          ! Evaluate new posion's forces on ML-PES
+!          CALL ml_pes(posion,a,b,Free,force_ml)
+!        END IF
+!        ml_fmaxatom = 0._q
+!        DO ni = 1,nions
+!          ftemp = 0._q
+!          DO nj = 1,3
+!            ftemp = ftemp + force_ml(nj,ni)**2
+!          ENDDO
+!          IF (ftemp .GT. ml_fmaxatom) ml_fmaxatom = ftemp
+!        ENDDO
+!        ml_fmaxatom = SQRT(ml_fmaxatom)
+
+        ! Write fmaxatom and frms when ml_chain_iter <= 1 
+        IF (ml_chain_iter <= 1) THEN 
+          !dft_fmaxatom=fmaxatom 
+          IF (IU6>=0) WRITE(IU6,4693) fmaxatom,frms
+ 4693     FORMAT(1x,' FORCES: max atom, RMS ',2f12.6)
+          IF (IU6>=0) WRITE(IU6,4694) SQRT(ftot),fmaxdim
+ 4694     FORMAT(1x,' FORCE total and by dimension',2f12.6)
+!          IF (IOPT == 8 .AND. IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+
+!        ELSE
+!          IF (IU6>=0) WRITE(IU6,*) 'ML-predicted fmaxatom=',fmaxatom
+!          IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+        END IF
+
+
+        ! added to monitor the stress vector 
+        stot = 0._q
+        smaxdim = 0._q
+        DO ni=1,3
+          DO nj=1,3
+            stot = stot + stress(nj,ni)**2
+            IF(smaxdim .LT. ABS(stress(nj,ni))) THEN
+              smaxdim = ABS(stress(nj,ni))
+            ENDIF
+          ENDDO
+        ENDDO
+ 4695   FORMAT(1x,' Stress total and by dimension',2f12.6)
+
+        ! Write stot, smaxdim when ml_chain_iter <= 1
+        IF (ml_chain_iter <= 1) THEN
+          IF (IU6>=0) WRITE(IU6,4695) SQRT(stot),smaxdim
+        END IF
+
+        ! for dimer/lanczos, use projected force in optimizer
+        IF (ICHAIN==2 .OR. ICHAIN==3) THEN
+          force = force_dimlan
+        ENDIF
+
+        ! Skip the following IF statement when ml_chain_iter > 1 
+        IF (ml_chain_iter > 1) GOTO 147
+
+        ! stops based on the Magnitude of the Force
+        IF(ftot_flag) THEN
+          fconverge = (SQRT(ftot) .LT. ftot_val)
+          CALLMPI_C(and_chain(fconverge))
+          IF (fconverge) THEN
+            IF (IU6>=0) WRITE(IU6,*) 'CONVERGED based on Magnitude of Force'
+            STOP
           ENDIF
-          IF (.NOT. sconverge) THEN
-            CALL opt_step(optflag,posion,toten,force,hstress,a,b)
+        ENDIF
+
+  147   CONTINUE
+
+        IF (IOPT .NE. 0) THEN
+          hstress = stress
+          CALL sdotA(hstress,a)
+          ! freeze out rotation
+          hstress(2,1) = 0._q
+          hstress(3,1) = 0._q
+          hstress(3,2) = 0._q
+          hstress = hstress/jacobian
+
+          ! When ml_chain_iter > 1, fconverge is determined based on ML-PES
+          fconverge = (fmaxatom .LT. ABS(EDIFFG_local))
+          CALLMPI_C(and_chain(fconverge))
+          IF (.NOT. fconverge) THEN
+            ! our own optimizers (optflag: do or do not optimize)  
+            !CALL opt_step(optflag,posion,toten,force,hstress,a,b)
+            CALL opt_step(optflag,posion,toten,force,hstress,a,b,&
+            ml_turnoff,Free,ml_chain_iter)
+            
+            ! When ml_chain_iter=1, store force based on DFT for the returning value to main.F   
+            IF (ml_chain_iter == 1) THEN
+              ! For dimer/lanczos, force should be true-force
+              IF (ICHAIN==2 .OR. ICHAIN==3) THEN 
+                force_mlreturn = force_vasp 
+              ELSE
+                force_mlreturn = force
+              END IF
+            ! Else, check if ml-pes should be trustable or not
+            ELSE
+              CALL ML_chain_criteria(nions, init_R, posion, A, iu6, ml_sat, ml_minmove)
+            END IF 
+               
           ELSE
-            IF (IU6>=0) WRITE(IU6,*) 'OPT: skip step - force has converged'
-            ! GH: remove any finite difference steps taken by dimer or lan
-            IF (ICHAIN==2 .OR. ICHAIN==3)  posion=posion_vasp
-            IF (ICHAIN==2) THEN
-              CALL dimer_fin(posion,a,b)
+            IF (cell_flag) THEN
+              sconverge = (smaxdim .LT. ABS(EDIFFG_local)*dble(nions))
+              CALLMPI_C(and_chain(sconverge))
+            ELSE
+              sconverge = .TRUE.
+            ENDIF
+            IF (.NOT. sconverge) THEN
+              CALL opt_step(optflag,posion,toten,force,hstress,a,b,&
+              ml_turnoff,Free,ml_chain_iter)
+              ! The returning force to main.F should be based on DFT
+              IF (ml_chain_iter == 1) THEN 
+                ! For dimer/lanczos, force should be true-force
+                IF (ICHAIN==2 .OR. ICHAIN==3) THEN
+                  force_mlreturn = force_vasp
+                ELSE
+                  force_mlreturn = force
+                END IF
+              END IF  
+            ELSE
+              IF (IU6>=0) WRITE(IU6,*) 'OPT: skip step - force has converged'
+              ! Turn off ml-optimizer to avoid problem of deallocating not allocated arrays
+              ml_turnoff = .TRUE.
+              ml_chain = .FALSE.
+              ! GH: remove any finite difference steps taken by dimer or lan
+              IF (ICHAIN==2 .OR. ICHAIN==3)  posion=posion_vasp
+              IF (ICHAIN==2) THEN
+                CALL dimer_fin(posion,a,b)
+              ENDIF
             ENDIF
           ENDIF
         ENDIF
-      ENDIF
+      END DO
 
 #ifdef EAM
       Ream = posion
@@ -389,10 +529,24 @@
       toten = Uvasp
 #endif
 
-    ! for dimer/lanczos, return the true force to vasp
-    IF (ICHAIN==2 .OR. ICHAIN==3) THEN
-      force = force_vasp
-    ENDIF
+    IF (IOPT==8 .AND. (ml_chain_iter > 1)) THEN
+      ! Write ML-chain usage info 
+      IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' ML-Chain information  '
+      IF (iu6>=0) WRITE(iu6,'(A29,I6)') 'Number of ML-potential used: ',ml_chain_iter-1
+
+      ! Return to the correct force
+      force = force_mlreturn
+      ! Reset fconverge to FALSE. This step is essential to check fconverge based on DFT not ML-PES
+      fconverge=.FALSE.
+      ! Cleanup for the next run
+      CALL ML_PyAMFF_cleanup
+    ELSE
+      ! for dimer/lanczos, return the true force to vasp
+      IF (ICHAIN==2 .OR. ICHAIN==3) THEN
+        force = force_vasp
+      END IF
+    END IF
+
     ! return unprojected stress vasp
     stress = stress_vasp
 
@@ -677,6 +831,43 @@
 #endif
     END SUBROUTINE and_chain
 
+    SUBROUTINE or_chain( value )
+      LOGICAL :: value
+      REAL(q) :: sum
+
+      IF (images==0) RETURN
+      IF (spring==-1000) RETURN
+#if defined(MPI) || defined(MPI_CHAIN)
+! if one node is .FALSE., .FALSE. is returned on all nodes
+      IF (value) THEN
+         sum=1
+      ELSE
+         sum=0
+      ENDIF
+      IF (LVCAIMAGES) THEN
+#ifndef old_vca
+         ! first core in image merges data
+         IF (comm%node_me==1) THEN
+            CALLMPI_C( M_sum_d( comm_chain, sum, 1 ))
+         ELSE
+            sum=0
+         ENDIF
+         ! now sum over all cores in one image
+         CALLMPI_C( M_sum_d( comm, sum, 1))
+#else
+         CALLMPI_C( M_sum_d( comm_chain, sum, 1 ))
+#endif
+      ELSE
+         CALLMPI_C( M_sum_d( comm_chain, sum, 1 ))
+      ENDIF
+
+      IF (sum>=1) THEN
+         value=.TRUE.
+      ELSE
+         value=.FALSE.
+      ENDIF
+#endif
+    END SUBROUTINE or_chain
 
 !**************** SUBROUTINE s2ts ************************************
 ! transform stress tensor to force on vectors
@@ -874,7 +1065,7 @@
       IU6 = IO%IU6
 
       ! write the version number
-      IF(IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.2, (08/11/21)'
+      IF(IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.1, (05/19/21)'
 
       IF(IU6>=0) WRITE(IU6,*) 'CHAIN: initializing optimizer'
 
@@ -882,6 +1073,12 @@
       CALL opt_init(T_INFO, IO)
       optflag = .FALSE.
 
+      IF (IOPT == 8) THEN
+        ml_turnoff=.FALSE.
+      ELSE
+        ml_turnoff=.TRUE.
+      END IF
+  
       ! initialize chain based method
       ICHAIN = 0
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'ICHAIN','=','#',';','I', &
@@ -914,6 +1111,51 @@
         IF (IU0>=0) WRITE(IU0,*)'Error reading item ''IOPT'' from file INCAR.'
         STOP
       ENDIF
+
+      !IF ML-PyAMFF is used for optmizer, read input variables for chain.F
+      IF (IOPT == 8) THEN
+        force_tol=0.010_q
+        CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FTOL','=','#',';','F', &
+                  IDUM,force_tol,CDUM,LDUM,CHARAC,N,1,IERR)
+        IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FTOL'' from file INCAR.'
+          STOP
+        ENDIF
+
+        ! By default, ML-optimizer is switched over to L-BFGS when fmaxatom < 0.050 
+        SWFTOL=0.050_q
+        CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_SWFTOL','=','#',';','F', &
+                    IDUM,SWFTOL,CDUM,LDUM,CHARAC,N,1,IERR)
+        IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_SWFTOL'' from file INCAR.'
+          STOP
+        END IF
+
+        trustR=0.5_q
+        CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_MAXMOVE','=','#',';','F', &
+                  IDUM,trustR,CDUM,LDUM,CHARAC,N,1,IERR)
+        IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_MAXMOVE'' from file INCAR.'
+         STOP
+        ENDIF
+
+        minmove=0.001_q
+        CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_MINMOVE','=','#',';','F', &
+                  IDUM,minmove,CDUM,LDUM,CHARAC,N,1,IERR)
+        IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_MINMOVE'' from file INCAR.'
+          STOP
+        ENDIF
+
+        max_iter=30
+        CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_MAXITER','=','#',';','I', &
+                  max_iter,RDUM,CDUM,LDUM,CHARAC,N,1,IERR)
+        IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_MAXITER'' from file INCAR.'
+          STOP
+        ENDIF
+
+      END IF
 
       EDIFFG_local = 0.1_q
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'EDIFFG','=','#',';','F', &
@@ -1178,4 +1420,66 @@
       ENDIF
 
     END FUNCTION LHYPER_NUDGE
+
+    SUBROUTINE ML_chain_criteria(nions, init_R, posion, A, iu6, ml_sat, ml_minmove)
+    !SUBROUTINE ML_chain_criteria(nions, init_R, posion, A, iu6)
+      ! ML-optimizer criteira of relaxing geomtery on ML-potential
+      ! This subroutine determines ml_chain 
+     
+      ! Inputs
+      INTEGER :: nions, iu6
+      REAL(q),DIMENSION(3,3) :: A
+      REAL(q), DIMENSION(3,nions) :: init_R, posion
+      LOGICAL :: ml_sat
+      ! Outputs
+      LOGICAL :: ml_minmove
+      ! Variables
+      INTEGER :: ni, nj
+      REAL(q) :: dmaxatom, dtemp, fmaxatom, ftemp
+      REAL(q), DIMENSION(3,nions) :: change_in_R
+      LOGICAL :: not_trustable
+
+      ! Initiate logical
+      not_trustable = .FALSE.
+      ml_minmove = .FALSE.
+ 
+      ! Calculate maximum move per atom
+      ! Here, positions are all in direct 
+      dmaxatom=0._q
+      change_in_R=posion-init_R
+      ! change direct to cartesian
+      CALL DIRKAR(NIONS, change_in_R, A)
+      DO ni = 1, nions
+        dtemp = 0._q
+        DO nj = 1,3
+          dtemp = dtemp + change_in_R(nj,ni)**2
+        END DO
+        IF (dtemp .GT. dmaxatom) dmaxatom = dtemp
+      END DO
+      dmaxatom = SQRT(dmaxatom)
+
+      ! If any of dmaxatom is greater than user-defined trustR, ml-chain is false
+      IF (dmaxatom .GT. trustR) not_trustable = .TRUE.
+      CALLMPI_C(or_chain(not_trustable)) 
+
+      !IF (iu6>=0) WRITE(iu6,*) 'dmaxatom=', dmaxatom  
+      ! If dmaxatom at the first step is too small, we will turn off ml-opt
+      ! The frms value becomes SWFTOL value 
+      !IF ( (ml_chain_iter == 2) .AND. (dmaxatom .LT. minmove) ) THEN
+      !  IF (iu6>=0) WRITE(iu6,*) 'The first step on the ML-PES is less than minmove =', minmove 
+      !  ml_minmove = .TRUE. 
+      !END IF
+      !CALLMPI_C(and_chain(ml_minmove))  
+
+      ! Determine ml_chain value
+      IF ( (not_trustable) .OR. &
+      !    (ml_minmove) .OR. &
+           (ml_chain_iter-1 .GE. max_iter) ) THEN
+        ml_chain = .FALSE.
+      END IF
+  
+      CALLMPI_C(or_chain(ml_chain)) 
+
+    END SUBROUTINE ML_chain_criteria
+    
 END MODULE chain

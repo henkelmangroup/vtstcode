@@ -35,7 +35,7 @@
 !
 !**********************************************************************
   CONTAINS
-    SUBROUTINE lbfgs_step(optflag, posion, toten, force, latt_a, latt_b)
+    SUBROUTINE lbfgs_step(optflag, posion, toten, force, latt_a, latt_b, ml_turnoff)
 
       REAL(q) :: posion(3,nions), toten, force(3,nions)
       REAL(q) :: latt_a(3,3), latt_b(3,3)
@@ -45,9 +45,11 @@
       REAL(q) :: a1, a2, curvature, direction_norm
       REAL(q) :: fp1, fp2, Favg, step_size
       INTEGER :: node, bound, im, jm
-
+      !ML-PyAMFF
+      LOGICAL :: ml_turnoff
+    
       maxmove_flag = .FALSE.
-
+     
       IF(iu6>0) WRITE(iu6,*) "OPT: LBFGS start"
 !#if defined(MPI) || defined (MPI_CHAIN)
       ! Convert the position into Cartesian coordinates
@@ -126,8 +128,10 @@
                IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaG:'
                IF (global .AND. (images_local .GT. 1)) THEN
                  IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,node)
+                 IF(iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,node)**2,DIM=2)))
                ELSE
                  IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,1)
+                 IF(iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,1)**2,DIM=2)))
                ENDIF
 
                change_in_R(itr,:,:,:) = R-Rold 
@@ -362,12 +366,23 @@
       ! END DANO
       ! ========
 
+      ! NO update posion if ml is running
+      !IF (PRESENT(ml_nostep) .EQV. .TRUE. .AND. ml_nostep) THEN 
+      !  GOTO 30
+      !END IF
+
       ! update posion
-      IF (global .AND. (images_local .GT. 1)) THEN
-        posion = R(:,:,node)
-      ELSE
-        posion = R(:,:,1)
-      ENDIF
+      IF (ml_turnoff .EQV. .FALSE.) THEN 
+        CONTINUE
+      ELSE   
+        IF (global .AND. (images_local .GT. 1)) THEN
+          posion = R(:,:,node)
+        ELSE
+          posion = R(:,:,1)
+        ENDIF
+      END IF   
+
+  !30  CONTINUE
 
       IF(iu6>0) THEN
         WRITE(iu6,*)'OPT: LBFGS: positions in Cartesian coordinates' 
