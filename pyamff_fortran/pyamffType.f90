@@ -19,7 +19,7 @@ MODULE pyamffType
     TYPE(ImgInfo), DIMENSION(:), ALLOCATABLE :: TrainImg
     !for output
     INTEGER :: final_epoch
-    DOUBLE PRECISION :: final_fRMSE, final_eRMSE, final_loss
+    DOUBLE PRECISION :: final_fRMSE, final_eRMSE, final_loss, final_gradnorm
     
     CONTAINS 
 

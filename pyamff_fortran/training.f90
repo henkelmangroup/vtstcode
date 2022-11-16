@@ -26,30 +26,20 @@ MODULE training
         INTEGER, DIMENSION(nAtoms) :: symbols
         DOUBLE PRECISION, DIMENSION(nelement) :: coeh
 
-        !Find input files: *.pyamff or fpParas.dat
-        ! Try open input filename 
+        ! Try opening the input filename 
         OPEN(55, FILE=filename, STATUS='old', IOSTAT=istat)
         IF (istat == 6 .OR. istat == 29) THEN 
-            !If file open is failed, load deafult fingerprints    
-            PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
-            ', specified in INCAR. Hence default fpParas will be used!'
-            CALL load_default_mlff(nelement, max_fps, uniqElems)
- 
+            !If file open is failed, load deafult fingerprints  
+            ! 11/16/22: Loading default mlff is broken currently. It should be fixed.  
+            !PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
+            !', specified in INCAR. Hence default fpParas will be used!'
+            !CALL load_default_mlff(nelement, max_fps, uniqElems)
+            PRINT *, 'Error: Input file missing! Current version requires an input file,', filename 
+            STOP
         ! Input file (filename) is found 
         ELSE
           !Read *.pyamff 
           CALL read_mlff(nelement, max_fps, filename)
-
-          !! Check filename 
-          !IF (filename .EQ. 'fpParas.dat') THEN
-          !  !Read fpParas.dat for fingerprint parameters 
-          !  CALL read_fpParas(filename, nelement, coeh)
-          !  CALL setup_mlparams(nelement)
-          !  CALL initialize_NN_params(uniqElems)
-          !ELSE 
-          !  !Read *.pyamff 
-          !  CALL read_mlff(nelement, max_fps, filename)
-          !END IF
         END IF
  
         !backward initiation
@@ -59,7 +49,8 @@ MODULE training
 
     SUBROUTINE trainExec(nAtoms,pos_car,cell,symbols,nelement,uniq_elements,&
                 max_natarr,maxfps,opt_type,max_epoch,force_coeff,&
-                energy_tol,force_tol,&
+                !energy_tol,force_tol,&
+                uq_method,energy_tol,force_tol,grad_tol,&
                 newImg,update_idx)
         USE nlist
         USE fpCalc
@@ -67,14 +58,14 @@ MODULE training
         IMPLICIT NONE
         !Inputs
         LOGICAL :: newImg
-        CHARACTER(*) :: opt_type
+        CHARACTER(*) :: opt_type, uq_method
         INTEGER :: nAtoms, max_epoch, nelement, maxfps, max_natarr
         INTEGER, OPTIONAL :: update_idx
         CHARACTER*3, DIMENSION(nelement) :: uniq_elements
         INTEGER, DIMENSION(nAtoms) :: symbols
         DOUBLE PRECISION, DIMENSION(nAtoms,3) :: pos_car
         DOUBLE PRECISION, DIMENSION(3,3) :: cell
-        DOUBLE PRECISION :: force_coeff, energy_tol, force_tol
+        DOUBLE PRECISION :: force_coeff, energy_tol, force_tol, grad_tol
         !Variables
         INTEGER :: i, j, img, maxneighs
         INTEGER, PARAMETER ::forceEngine = 1, max_neighs=100
@@ -175,77 +166,56 @@ MODULE training
             END DO   
             !Timings
             CALL cpu_time(start)
-            CALL Trainer(opt_type,max_epoch,MAXVAL(nGs),MAXVAL(nhidneurons),uniq_elements,force_coeff,energy_tol,force_tol)
+            CALL Trainer(opt_type,max_epoch,MAXVAL(nGs),MAXVAL(nhidneurons),uniq_elements,&
+                force_coeff,uq_method,energy_tol,force_tol,grad_tol)
             CALL cpu_time(finish)
             print *, 'Training Time: ', finish-start, "seconds"
         END IF
     END SUBROUTINE
    
     SUBROUTINE Trainer(opt_type,maxepochs,max_nGs,max_hidneurons,uniq_elements,&
-    fconst,etol,ftol,&
+    fconst,uq_method,etol,ftol,gtol,&
     learningRate)
         IMPLICIT NONE
         !Inputs 
-        CHARACTER(*) :: opt_type 
+        CHARACTER(*) :: opt_type, uq_method 
         INTEGER, INTENT(IN) :: maxepochs, max_nGs, max_hidneurons
-        DOUBLE PRECISION :: fconst, etol, ftol
+        DOUBLE PRECISION :: fconst, etol, ftol, gtol
         DOUBLE PRECISION, OPTIONAL :: learningRate
         CHARACTER*3, DIMENSION(nelements) :: uniq_elements 
         !Must be input variables eventually
         DOUBLE PRECISION :: beta1, beta2, eps, weight_decay
         !variables
-        LOGICAL :: exist_flag
+        LOGICAL :: exist_flag, model_converge
         INTEGER :: epoch, time, i, totnatoms
         DOUBLE PRECISION :: lr
         DOUBLE PRECISION :: energyloss, forceloss, loss
-        DOUBLE PRECISION :: energyRMSE, forceRMSE
-    
+        DOUBLE PRECISION :: energyRMSE, forceRMSE, gradnorm
+ 
         IF (PRESENT(learningRate)) THEN
             lr=learningRate
         ELSE  
             lr=0.01
         END IF   
- 
-        !Check loss before epoch starts
-        CALL LossFunction(fconst,energyloss,forceloss,loss)
-        !Original code
-        energyRMSE=sqrt(energyloss/nimages)
-        forceRMSE=sqrt(forceloss/nimages)
-        
-        !print *, 'result: ','0', loss, energyRMSE, forceRMSE
-        !Check pyamff.log file (Debug mode)
-        !INQUIRE(file='pyamff.log',exist=exist_flag)
-        !IF (exist_flag) THEN
-        !    OPEN(unit=10, file='pyamff.log', status='old',position='append')
-        !ELSE
-        !    OPEN(unit=10, file='pyamff.log', status='new')
-        !END IF
-        !WRITE(10,'(a)') 'epoch    lossValue   EnergyRMSE    ForceRMSE'
-        !epoch=0
-        !WRITE(10,'(I6,F16.8,F16.8,F16.8)') epoch, loss, energyRMSE, forceRMSE
-        
-        IF (energyRMSE < etol .and. forceRMSE < ftol) THEN
-            final_fRMSE=forceRMSE
-            final_eRMSE=energyRMSE
-            final_loss=loss
-            final_epoch=0
-            !WRITE(10,'(a)') 'Minimization converged' 
-            PRINT *, 'Minimization converged'
-            !print *, 'inputE=', inputE
-            !print *, 'targetE=', targetE
-            !write trained model in a file 
-            !CALL write_mlff(nelements,uniq_elements)
-            GOTO 30
-            !STOP
-        END IF
 
+        ! Initiate model_converge flag
+        model_converge=.FALSE.
+ 
+        ! Check uncertainty of model
+        CALL calc_model_uq(uq_method,etol,ftol,gtol,fconst,0,&
+        energyloss,forceloss,energyRMSE,forceRMSE,gradnorm,model_converge)
+
+        IF (model_converge) GOTO 30
+ 
         DO epoch=1, maxepochs
             curr_epoch=epoch
             !print *, '*********************************'
             !print *, 'epoch=', epoch
             !print *, '*********************************'
-            
-            CALL backward(fconst)
+
+            ! If uq_method is RMSE, backward propagation           
+            IF (uq_method == 'RMSE') CALL backward(fconst)
+
             IF (epoch == 1) THEN
                 CALL opt_init(opt_type)
                 !INQUIRE(file='pyamff.log',exist=exist_flag) 
@@ -256,7 +226,9 @@ MODULE training
                 !END IF
                 !WRITE(10,'(a)') 'epoch    lossValue   EnergyRMSE    ForceRMSE'
             END IF
-            !TODO: how to set parameters of each optimizers
+             
+            ! Take an optimization step       
+            ! TODO: how to set parameters of each optimizers
             CALL opt_step(opt_type,epoch)
 
             ! Compute energy and forces with updated parameters
@@ -288,34 +260,18 @@ MODULE training
               !print *, 'atomic info cleanup for this epoch'
             END DO
              
-            ! Compute loss  
-            CALL LossFunction(fconst,energyloss,forceloss,loss)
-            
-            !Original code
-            energyRMSE=sqrt(energyloss/nimages)
-            forceRMSE=sqrt(forceloss/nimages)
-                
-            !WRITE(10,'(I6,F16.8,F16.8,F16.8)') epoch, loss, energyRMSE, forceRMSE
-            !print *, 'result: ',epoch, loss, energyRMSE, forceRMSE
-            IF (energyRMSE < etol .and. forceRMSE < ftol) THEN
-                final_fRMSE=forceRMSE
-                final_eRMSE=energyRMSE
-                ! Print loss in the same unit (not squared)
-                final_loss=energyRMSE+forceRMSE*fconst
-                final_epoch=epoch
-                !WRITE(10,'(a)') 'Minimization converged' 
-                PRINT *, 'Minimization converged'
-                !print *, 'inputE=', inputE
-                !print *, 'targetE=', targetE
-                !write trained model in a file 
-                !CALL write_mlff(nelements,uniq_elements)
-                GOTO 30
-                !STOP
-            END IF
+            ! Check uq of model with updated parameters
+            CALL calc_model_uq(uq_method,etol,ftol,gtol,fconst,epoch,&
+            energyloss,forceloss,energyRMSE,forceRMSE,gradnorm,model_converge)
+
+            IF (model_converge) GOTO 30
+
         END DO
+
         PRINT *, 'Maximum number of epochs reached but minimization NOT converged.'
         final_fRMSE=forceRMSE
         final_eRMSE=energyRMSE
+        IF (uq_method == 'GRADNORM') final_gradnorm=gradnorm
         ! Print loss in the same unit (not squared)
         final_loss=energyRMSE+forceRMSE*fconst
         final_epoch=epoch-1
@@ -324,6 +280,67 @@ MODULE training
  
     END SUBROUTINE 
     
+    SUBROUTINE calc_model_uq(uq_method,etol,ftol,gtol,fconst,epoch,&
+                eloss,floss,eRMSE,fRMSE,gradnorm,model_converge)
+      IMPLICIT NONE
+      ! Inputs
+      INTEGER :: epoch
+      CHARACTER(*) :: uq_method
+      DOUBLE PRECISION :: etol, ftol, gtol, fconst
+      ! Outputs
+      LOGICAL :: model_converge
+      DOUBLE PRECISION :: eloss, floss, loss, eRMSE, fRMSE 
+      DOUBLE PRECISION :: gradnorm
+
+      ! Initiate model_converge flag
+      model_converge=.FALSE.
+
+      ! Calculate loss before epoch starts
+      CALL LossFunction(fconst,eloss,floss,loss)
+      ! Calculate RMSE values 
+      eRMSE=sqrt(eloss/nimages)
+      fRMSE=sqrt(floss/nimages)
+  
+      IF (uq_method == 'RMSE') THEN
+          IF (eRMSE < etol .and. fRMSE < ftol) THEN
+              final_fRMSE=fRMSE
+              final_eRMSE=eRMSE
+              final_loss=loss
+              final_epoch=epoch
+              PRINT *, 'Minimization converged'
+              model_converge=.TRUE.
+          END IF
+      ELSE IF (uq_method == 'GRADNORM') THEN
+          ! Backpropagation
+          CALL backward(fconst)
+          ! Calculate gradient magnitude (norm)
+          CALL calc_gradnorm(gradnorm)
+          ! Check if the convergence criterion is met before taking an optimization step
+          IF (gradnorm < gtol) THEN
+              final_fRMSE=fRMSE
+              final_eRMSE=eRMSE
+              final_gradnorm=gradnorm
+              ! Print loss in the same unit (not squared)
+              final_loss=eRMSE+fRMSE*fconst
+              final_epoch=epoch
+              PRINT *, 'Minimization converged'
+              model_converge=.TRUE.
+          END IF
+      END IF
+
+    END SUBROUTINE calc_model_uq 
+   
+    SUBROUTINE calc_gradnorm(gradnorm)
+    ! Calculate gradient magnitude to quantify uncertainty of our model.
+        IMPLICIT NONE
+        DOUBLE PRECISION :: gradnorm
+
+        gradnorm=0.d0
+        gradnorm=SUM(bias_grad*bias_grad)+SUM(weight_grad*weight_grad)
+        gradnorm=SQRT(gradnorm)
+
+    END SUBROUTINE calc_gradnorm
+ 
     SUBROUTINE write_mlff(nelement, uniq_elements)
       !------------------------------------------------------------------------!
       !This is currently temporary format. Only prints out Model parameters    !
@@ -423,6 +440,6 @@ MODULE training
         CALL backcleanup
 
     END SUBROUTINE
- 
+
 END MODULE
 

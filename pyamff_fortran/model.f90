@@ -148,7 +148,8 @@ MODULE PyAMFF
 
     SUBROUTINE PyAMFF_step(posions,trueEs,trueFs,boxes,nelement,in_nimg,totnimg,&
     max_epoch,max_natoms,opt_type,force_coeff,newImg,eflag,fflag,Frees,&
-    energy_tol,force_tol,&
+    !energy_tol,force_tol,&
+    uq_method,energy_tol,force_tol,grad_tol,&
     new_nat,in_natarr)
     !TODO: Adding multiple images to the training dataset
     !---------------------------------------------------------------------!
@@ -161,8 +162,8 @@ MODULE PyAMFF
       IMPLICIT NONE
       !Inputs
       INTEGER :: nelement, in_nimg, totnimg, max_epoch, max_natoms
-      CHARACTER(*) :: opt_type
-      DOUBLE PRECISION :: force_coeff, energy_tol, force_tol
+      CHARACTER(*) :: opt_type, uq_method
+      DOUBLE PRECISION :: force_coeff, energy_tol, force_tol, grad_tol
       LOGICAL :: newImg, eflag, fflag
       DOUBLE PRECISION, DIMENSION(in_nimg) :: trueEs
       DOUBLE PRECISION, DIMENSION(3,max_natoms,in_nimg) :: trueFs, Frees
@@ -177,12 +178,6 @@ MODULE PyAMFF
       !Variables
       INTEGER :: img, update_idx, i, img_ptr
     
-      !print *, 'pyamff_step is called'
-      !DO i=1, in_nimg
-      !  print *, 'posions of image',i,'=', posions(:,:,i)
-      !  print *, 'trueEs of image',i,'=', trueEs(i)
-      !  print *, 'trueFs of image',i,'=', trueFs(:,:,i)
-      !END DO
 
       !flags for training !need better way
       energy_training=eflag
@@ -274,7 +269,9 @@ MODULE PyAMFF
         CALL trainExec(TrainImg(img)%natoms,TrainImg(img)%poscar,&
         TrainImg(img)%cell,TrainImg(img)%symbols,nelement,uniqElems,&
         MAXVAL(TrainImg(img)%natoms_arr),MAXVAL(nGs),opt_type,&
-        max_epoch,force_coeff,energy_tol,force_tol,newImg,update_idx)
+        !max_epoch,force_coeff,energy_tol,force_tol,newImg,update_idx)
+        max_epoch,force_coeff,uq_method,energy_tol,force_tol,grad_tol,&
+        newImg,update_idx)
       END DO
 
     END SUBROUTINE
@@ -485,8 +482,6 @@ MODULE PyAMFF
       energy_training=.FALSE.
       force_training=.FALSE.
       
-      !print *, 'Calculator:all set up '
-      
       fps=0.
       dfps=0.
       temp_dfps=0.
@@ -503,9 +498,6 @@ MODULE PyAMFF
       CALL update_atomInfo2(nAtoms, nelement, MAXVAL(nGs), in_natarr)
       !print *, 'atomic info is updated'
 
-      !CALL normalizeFPs(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(num_neigh), &
-      !                   symbols, num_neigh, neighs, fps, dfps(:,1:MAXVAL(num_neigh)+1,:,:))
-      !print *, 'Calculator: fingerprints are normalized'                   
       !Reorder fingerprints
       DO i = 1, nelements
         DO j = 1, natoms_arr(i)
@@ -514,6 +506,7 @@ MODULE PyAMFF
       END DO
       CALL normalizeFPs2(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
       max_natarr,sub_num_neigh,sub_neighs,symbols,ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:))
+
       !print *, 'normalized'            
 
       CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),sub_neighs(:,1:MAXVAL(sub_num_neigh)),&

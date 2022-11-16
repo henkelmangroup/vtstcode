@@ -21,24 +21,16 @@
     PRIVATE
     PUBLIC :: ML_PyAMFF_train, ML_PyAMFF_step, ML_PyAMFF_init, ML_PyAMFF_cleanup, ml_pes
     
-    INTEGER :: nions, nelement, iu0, iu6, totnimg
+    INTEGER :: nions, nelement, iu0, iu6, mdout, pesout, totnimg
     INTEGER :: images_local
     INTEGER, DIMENSION(:), ALLOCATABLE :: NAts
     INTEGER, DIMENSION(:,:), ALLOCATABLE :: nat_arr !2nd dim is for consistency with PyAMFF structure
     LOGICAL :: initImg, newImg, eflag, fflag, global
     INTEGER :: maxEpochs
-    CHARACTER*8 :: optType
+    CHARACTER*8 :: optType, uq_method
     CHARACTER*2, DIMENSION(:), ALLOCATABLE :: uniqEls
     REAL(q) :: force_coeff, force_tol, energy_tol, gradtol
-    !Stopping criteria test variables
-    !TEST #1
-    !REAL(q) :: init_maxforce, old_maxforce
-    !REAL(q), ALLOCATABLE :: fmaxatom(:), ftot(:), dmaxatom(:) 
-    !TEST #2
-    !REAL(q) :: trustR, ml_minmove
-    !REAL(q), ALLOCATABLE :: init_R(:,:,:), change_in_R(:,:,:)
-    !REAL(q) :: EDIFFG_local
-
+    
     !for qm step calc
     REAL(q) :: maxmove, dt, stepsize
 
@@ -77,6 +69,8 @@
       nelement=T_INFO%ntyp
       iu0=IO%IU0
       iu6=IO%IU6
+      !mdout=IO%MDOUT ! for debug, eventually it will be gone
+      !pesout=IO%PESOUT ! for debug, eventually it will be gone
       initImg=.TRUE.
 
       IF (images == 0) THEN 
@@ -122,31 +116,46 @@
 
       !read variables used for the ML optimzier
       !Note: RDATAB subroutine is in /lib/drdatab.F
-      energy_tol=0.001_q
-      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_ETOL','=','#',';','F', &
+     
+      ! Check uncertainty method 
+      uq_method='RMSE'
+      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_UQ','=','#',';','S', &
+      &            IDUM,RDUM,CDUM,LDUM,uq_method,N,LEN(filename),IERR)
+      IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+          IF (iu0>=0) WRITE(iu0,*)'Error reading item ''PYAMFF_UQ'' from file INCAR.'
+          STOP
+      ENDIF
+      
+      IF (uq_method == 'RMSE') THEN  
+          energy_tol=0.001_q
+          CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_ETOL','=','#',';','F', &
                   IDUM,energy_tol,CDUM,LDUM,CHARAC,N,1,IERR)
-      IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
-         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_ETOL'' from file INCAR.'
-         STOP
-      ENDIF
+          IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+              IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_ETOL'' from file INCAR.'
+              STOP
+          ENDIF
              
-      force_tol=0.010_q
-      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FTOL','=','#',';','F', &
+          force_tol=0.010_q
+          CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FTOL','=','#',';','F', &
                   IDUM,force_tol,CDUM,LDUM,CHARAC,N,1,IERR)
-      IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
-         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FTOL'' from file INCAR.'
-         STOP
-      ENDIF
-
-      ! This is for gradnorm as a model convergence criteria.
-      gradtol=0.001_q
-      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_TOL','=','#',';','F', &
+          IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+             IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FTOL'' from file INCAR.'
+             STOP
+          ENDIF
+      ELSE IF (uq_method == 'GRADNORM') THEN 
+          ! This is for gradnorm as a model convergence criteria.
+          gradtol=0.001_q
+          CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_TOL','=','#',';','F', &
                   IDUM,gradtol,CDUM,LDUM,CHARAC,N,1,IERR)
-      IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
-         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_TOL'' from file INCAR.'
-         STOP
-      ENDIF 
- 
+          IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+              IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_TOL'' from file INCAR.'
+              STOP
+          ENDIF
+      ELSE 
+          IF (iu0>=0) WRITE(iu0,*) 'Value Error of ''PYAMFF_UQ'' from file INCAR.'
+          IF (iu0>=0) WRITE(iu0,*) 'Available values: ''RMSE, GRADNORM'
+      END IF
+
       force_coeff=1.00_q
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FCOEFF','=','#',';','F', &
                   IDUM,force_coeff,CDUM,LDUM,CHARAC,N,1,IERR)
@@ -291,25 +300,32 @@
         Free_all(:,:,:)=0._q
         Free_all(:,:,1)=Free 
       END IF
-      
+     
+      ! TODO: Pass uq_method  
       !Perform PyAMFF training
       IF (newImg) THEN
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
-          eflag,fflag,Free_all,energy_tol,force_tol,&
+          !eflag,fflag,Free_all,energy_tol,force_tol,&
           !eflag,fflag,Free_all,gradtol,&   !This is for gradnorm as model convergence criteria
-          NAts,nat_arr)
+           eflag,fflag,Free_all,uq_method,energy_tol,force_tol,gradtol,&
+           NAts,nat_arr)
       ELSE
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
-          eflag,fflag,Free_all,energy_tol,force_tol)
+          !eflag,fflag,Free_all,energy_tol,force_tol)
           !eflag,fflag,Free_all,gradtol)    !This is for gradnorm as model convergence criteria
+           eflag,fflag,Free_all,uq_method,energy_tol,force_tol,gradtol)
       END IF
 
       IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' Training information '
       IF (iu6>=0) WRITE(iu6,'(A)') 'epoch    lossValue   EnergyRMSE    ForceRMSE'
       IF (iu6>=0) WRITE(iu6,'(I6,F16.8,F16.8,F16.8)') final_epoch, final_loss, final_eRMSE, final_fRMSE
 
+      ! Pd111_H: evolution of PES
+      !pes_posion=posion
+      !CALL calc_pes(pes_posion,boxes_all(:,:1),1.0_q,21) 
+        
       !Convert posion back to direct
       CALL kardir(nions,posion,latt_b)
 
@@ -366,5 +382,69 @@
       CALL kardir(nions,posion,latt_b)
 
     END SUBROUTINE 
+
+!    SUBROUTINE write_mlff_vasp
+!      !------------------------------------------------------------------------!
+!      !This is currently temporary format. Only prints out Model parameters    !
+!      !Eventually this should go to the fingerprints to write the fingerprint  !
+!      !parameters as well                                                      !
+!      !------------------------------------------------------------------------!
+!      IMPLICIT NONE
+!      !Variables
+!      INTEGER :: i, l
+!
+!      !TODO: file name should beTrainImg(img)%natoms!TODO: make more formatted
+!      OPEN(mdout, file="trained.mlff", status='unknown') 
+!      WRITE(mdout,'(a)') '#Model Parameters'
+!      DO i=1, nelement
+!        WRITE(mdout,'(A2)') uniqEls(i)
+!        WRITE(mdout,*) in_weights(1:nGs(i),1:nhidneurons(1),i), '#inputLayer weight'
+!        WRITE(mdout,*) in_biases(1:nhidneurons(1),i), '#inputLayer bias'
+!        DO l=1, nhidlayers-1
+!          WRITE(mdout,*) hid_weights(1:nhidneurons(l),1:nhidneurons(l+1),l,i),&
+!                                 '#hiddenLayer_',l,'weight'
+!          WRITE(mdout,*) hid_biases(1:nhidneurons(l+1),l,i),&
+!                                 '#hiddenLayer_',l,'bias'
+!        END DO
+!        WRITE(mdout,*) out_weights(1:nhidneurons(nhidlayers),1,i), '#outputLayer weight'
+!        WRITE(mdout,*) out_biases(i), '#outputLayer bias'
+!      END DO
+!      WRITE(mdout,'(a)') '#Energy Scaling Parameters'
+!      WRITE(mdout,'(a)') scaler_type
+!      WRITE(mdout,*) slope, intercept
+!      !CLOSE(mdout)
+!    END SUBROUTINE
+!
+!    SUBROUTINE calc_pes(pes_posion,boxes,maxz,move_idx)
+!    !SUBROUTINE calc_pes(pes_posion,latt_a,maxy,move_idx)
+!      IMPLICIT NONE
+!      !Inputs
+!      REAL(q) :: maxz, pes_posion(3,nions)
+!      DOUBLE PRECISION, DIMENSION(9,1) :: boxes
+!      INTEGER :: move_idx 
+!      !Variables
+!      INTEGER :: i
+!      REAL(q) :: z, step
+!      REAL(q) :: predE, predF(3,nions)
+!
+!      !print *, 'calc pes called'
+!      step=maxz/50.
+!      OPEN(pesout, file="pes.dat", status='unknown') 
+!      DO i=1, 50
+!        !Move atom "move_idx" from 0 to maxy
+!        z=18.0+(i-1)*step
+!        !z=5.904+(i-1)*step
+!        pes_posion(3,move_idx)=z
+!        !pes_posion(1,move_idx)=z
+!        !Run on trained model
+!        CALL PyAMFF_calc(nions,pes_posion,boxes(1:9,1),nat_arr(:,1),MAXVAL(nat_arr),&
+!        nelement,uniqEls,predE,predF)
+!        IF (i==1) THEN 
+!          WRITE(pesout,'(a)') "#step   z   predE " !Pd111_h
+!          !WRITE(pesout,'(a)') "#step   x   predE "
+!        END IF
+!        WRITE(pesout,'(I6,F16.8,F16.8)') i, z, predE
+!      END DO
+!    END SUBROUTINE
 
   END MODULE

@@ -293,6 +293,9 @@
           ELSE
             ! Evaluate force on ML-PES when ml_chain_iter > 1
             CALL ml_pes(posion,a,b,Free,force)
+            ! Sanity check (Will not work for NEB)
+            !force_ml=force
+            !IF (IU6>0) WRITE(IU6, *) 'ML force=', force
           END IF
         END IF
 
@@ -389,19 +392,22 @@
         IF ( (.NOT. ml_turnoff) .AND. (ml_chain_iter ==1)) CALL ML_PyAMFF_train(posion,toten,force_vasp,a,b,Free) 
         
         !For sanity check 
-!        IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) .AND. (ml_chain_iter==1)) THEN
-!          ! Evaluate new posion's forces on ML-PES
-!          CALL ml_pes(posion,a,b,Free,force_ml)
-!        END IF
-!        ml_fmaxatom = 0._q
-!        DO ni = 1,nions
-!          ftemp = 0._q
-!          DO nj = 1,3
-!            ftemp = ftemp + force_ml(nj,ni)**2
-!          ENDDO
-!          IF (ftemp .GT. ml_fmaxatom) ml_fmaxatom = ftemp
-!        ENDDO
-!        ml_fmaxatom = SQRT(ml_fmaxatom)
+        !IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) .AND. (ml_chain_iter==1)) THEN
+          ! Evaluate new posion's forces on ML-PES
+          !CALL ml_pes(posion,a,b,Free,force_ml)
+          !IF (IU6>0) WRITE(IU6, *) 'DFT force=', force
+          !IF (IU6>0) WRITE(IU6, *) 'ML force=', force_ml
+        !END IF
+
+        !ml_fmaxatom = 0._q
+        !DO ni = 1,nions
+        !  ftemp = 0._q
+        !  DO nj = 1,3
+        !    ftemp = ftemp + force_ml(nj,ni)**2
+        !  ENDDO
+        !  IF (ftemp .GT. ml_fmaxatom) ml_fmaxatom = ftemp
+        !ENDDO
+        !ml_fmaxatom = SQRT(ml_fmaxatom)
 
         ! Write fmaxatom and frms when ml_chain_iter <= 1 
         IF (ml_chain_iter <= 1) THEN 
@@ -410,11 +416,11 @@
  4693     FORMAT(1x,' FORCES: max atom, RMS ',2f12.6)
           IF (IU6>=0) WRITE(IU6,4694) SQRT(ftot),fmaxdim
  4694     FORMAT(1x,' FORCE total and by dimension',2f12.6)
-!          IF (IOPT == 8 .AND. IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+          IF (IOPT == 8 .AND. IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
 
-!        ELSE
-!          IF (IU6>=0) WRITE(IU6,*) 'ML-predicted fmaxatom=',fmaxatom
-!          IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+        !ELSE
+        !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted fmaxatom=',fmaxatom
+        !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
         END IF
 
 
@@ -473,7 +479,6 @@
             !CALL opt_step(optflag,posion,toten,force,hstress,a,b)
             CALL opt_step(optflag,posion,toten,force,hstress,a,b,&
             ml_turnoff,Free,ml_chain_iter)
-            
             ! When ml_chain_iter=1, store force based on DFT for the returning value to main.F   
             IF (ml_chain_iter == 1) THEN
               ! For dimer/lanczos, force should be true-force
