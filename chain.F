@@ -134,9 +134,9 @@
       REAL(q),ALLOCATABLE,SAVE :: force_all(:,:,:)
 
       ! ML-optimizer
-      LOGICAL :: ml_minmove, ml_sat
-      REAL(q) :: dft_fmaxatom, ml_fmaxatom
-      REAL(q), DIMENSION(3,nions) :: force_mlreturn, force_ml, init_R
+      LOGICAL :: ml_cleanup
+      REAL(q) :: dft_fmaxatom, ml_fmaxatom, toten_ml
+      REAL(q), DIMENSION(3,nions) :: force_mlreturn, force_ml, init_R, posion_ml
 
 #if defined(MPI) || defined (MPI_CHAIN)
       node=comm_chain%node_me
@@ -268,8 +268,6 @@
       ! Initialize ML-optimizer flags 
       IF ( IOPT == 8 ) THEN
         ml_turnoff = .FALSE.
-        ml_minmove = .FALSE.
-        ml_sat = .FALSE.
         ! Save initial posion for the user-defiend trust radius 
         init_R = posion
       ELSE
@@ -286,16 +284,17 @@
           ml_chain=.FALSE.
         END IF
 
-        ! ML-optimizer: Save true force for training before taking chain-steps
+        ! ML-optimizer: Save true force and posion for training before taking chain-steps
         IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) ) THEN
           IF (ml_chain_iter == 1) THEN 
             force_vasp=force
+            posion_vasp=posion
           ELSE
             ! Evaluate force on ML-PES when ml_chain_iter > 1
-            CALL ml_pes(posion,a,b,Free,force)
-            ! Sanity check (Will not work for NEB)
-            !force_ml=force
-            !IF (IU6>0) WRITE(IU6, *) 'ML force=', force
+            CALL ml_pes(posion,a,b,Free,toten,force)
+            ! For dimer and lanczos, store true force on ML-PES
+            force_ml=force
+            posion_ml=posion
           END IF
         END IF
 
@@ -306,10 +305,7 @@
           CALL dynmat_step(optflag,posion,toten,force,a,b)
         ELSEIF (ICHAIN==2) THEN
           IF (IOPT == 8) THEN
-            force_vasp=force
             IF (ml_chain_iter > 1) THEN
-              !force_vasp=force !Update true force when ml_chain_iter > 1 
-              posion_vasp=posion
               ! Keep turning on optflag until ml-chain becomes false
               optflag=.TRUE.
             END IF  
@@ -317,6 +313,12 @@
           CALL dimer_step(optflag,posion,toten,force,a,b)
           force_dimlan = force
         ELSEIF (ICHAIN==3) THEN
+          IF (IOPT == 8) THEN
+            IF (ml_chain_iter > 1) THEN
+              ! Keep turning on optflag until ml-chain becomes false
+              optflag=.TRUE.
+            END IF
+          END IF
           CALL lanczos_step(optflag,posion,toten,force,a,b)
           force_dimlan = force
         ELSEIF (ICHAIN==6) THEN
@@ -351,7 +353,11 @@
         ! for dimer/lanczos, check force criteria using the vasp force
         IF (ICHAIN==2 .OR. ICHAIN==3) THEN
           force_dimlan = force
-          force = force_vasp
+          IF ((IOPT == 8) .AND. (ml_chain_iter > 1)) THEN
+            force = force_ml
+          ELSE
+            force = force_vasp
+          END IF
           !ML-optimizer only trains until optflag becomes true
           IF (IOPT == 8 .AND. (.NOT. optflag)) ml_chain=.FALSE. 
         ENDIF
@@ -389,14 +395,14 @@
         END IF
 
         ! Train ML-PES when ml_chain_iter=1 and ml_turnoff is false
-        IF ( (.NOT. ml_turnoff) .AND. (ml_chain_iter ==1)) CALL ML_PyAMFF_train(posion,toten,force_vasp,a,b,Free) 
-        
+        IF ( (.NOT. ml_turnoff) .AND. (ml_chain_iter ==1)) THEN 
+          CALL ML_PyAMFF_train(posion_vasp,toten,force_vasp,a,b,Free) 
+          ml_cleanup=.TRUE.
+        END IF
         !For sanity check 
         !IF ( (IOPT == 8) .AND. (.NOT. ml_turnoff) .AND. (ml_chain_iter==1)) THEN
-          ! Evaluate new posion's forces on ML-PES
-          !CALL ml_pes(posion,a,b,Free,force_ml)
-          !IF (IU6>0) WRITE(IU6, *) 'DFT force=', force
-          !IF (IU6>0) WRITE(IU6, *) 'ML force=', force_ml
+        !  Evaluate new posion's forces on ML-PES
+        !  CALL ml_pes(posion,a,b,Free,toten_ml,force_ml)
         !END IF
 
         !ml_fmaxatom = 0._q
@@ -416,11 +422,14 @@
  4693     FORMAT(1x,' FORCES: max atom, RMS ',2f12.6)
           IF (IU6>=0) WRITE(IU6,4694) SQRT(ftot),fmaxdim
  4694     FORMAT(1x,' FORCE total and by dimension',2f12.6)
-          IF (IOPT == 8 .AND. IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+          !IF (IOPT == 8 .AND. IU6>=0) WRITE(IU6,4696) ml_fmaxatom
 
-        !ELSE
-        !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted fmaxatom=',fmaxatom
-        !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+        ELSE
+          IF (IU6>=0) WRITE(IU6,4696) fmaxatom
+ 4696     FORMAT(1x,' ML predicted forces: max atom ',2f12.6)
+          !IF (ICHAIN == 0) THEN 
+          !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
+          !END IF
         END IF
 
 
@@ -479,7 +488,7 @@
             !CALL opt_step(optflag,posion,toten,force,hstress,a,b)
             CALL opt_step(optflag,posion,toten,force,hstress,a,b,&
             ml_turnoff,Free,ml_chain_iter)
-            ! When ml_chain_iter=1, store force based on DFT for the returning value to main.F   
+            ! When ml_chain_iter=1, save force for the vasp stop criteria 
             IF (ml_chain_iter == 1) THEN
               ! For dimer/lanczos, force should be true-force
               IF (ICHAIN==2 .OR. ICHAIN==3) THEN 
@@ -489,7 +498,7 @@
               END IF
             ! Else, check if ml-pes should be trustable or not
             ELSE
-              CALL ML_chain_criteria(nions, init_R, posion, A, iu6, ml_sat, ml_minmove)
+              CALL ML_chain_criteria(nions, init_R, posion, A, iu6)
             END IF 
                
           ELSE
@@ -510,16 +519,31 @@
                 ELSE
                   force_mlreturn = force
                 END IF
-              END IF  
+              ! Else, check if ml-pes should be trustable or not
+              ELSE
+                CALL ML_chain_criteria(nions, init_R, posion, A, iu6)
+              END IF
+  
             ELSE
               IF (IU6>=0) WRITE(IU6,*) 'OPT: skip step - force has converged'
               ! Turn off ml-optimizer to avoid problem of deallocating not allocated arrays
               ml_turnoff = .TRUE.
               ml_chain = .FALSE.
               ! GH: remove any finite difference steps taken by dimer or lan
-              IF (ICHAIN==2 .OR. ICHAIN==3)  posion=posion_vasp
+              !IF (ICHAIN==2 .OR. ICHAIN==3)  posion=posion_vasp
+              IF (ICHAIN==2 .OR. ICHAIN==3) THEN
+                IF (IOPT == 8 .AND. (ml_chain_iter > 1)) THEN 
+                  posion=posion_ml
+                ELSE
+                  posion=posion_vasp
+                END IF
+              END IF            
               IF (ICHAIN==2) THEN
-                CALL dimer_fin(posion,a,b)
+                IF (IOPT == 8 .AND. (ml_chain_iter > 1)) THEN 
+                  CONTINUE
+                ELSE
+                  CALL dimer_fin(posion,a,b)
+                END IF
               ENDIF
             ENDIF
           ENDIF
@@ -543,14 +567,14 @@
       force = force_mlreturn
       ! Reset fconverge to FALSE. This step is essential to check fconverge based on DFT not ML-PES
       fconverge=.FALSE.
-      ! Cleanup for the next run
-      CALL ML_PyAMFF_cleanup
     ELSE
       ! for dimer/lanczos, return the true force to vasp
       IF (ICHAIN==2 .OR. ICHAIN==3) THEN
         force = force_vasp
       END IF
     END IF
+
+    IF (IOPT==8 .AND. (ml_cleanup)) CALL ML_PyAMFF_cleanup
 
     ! return unprojected stress vasp
     stress = stress_vasp
@@ -1426,8 +1450,7 @@
 
     END FUNCTION LHYPER_NUDGE
 
-    SUBROUTINE ML_chain_criteria(nions, init_R, posion, A, iu6, ml_sat, ml_minmove)
-    !SUBROUTINE ML_chain_criteria(nions, init_R, posion, A, iu6)
+    SUBROUTINE ML_chain_criteria(nions, init_R, posion, A, iu6)
       ! ML-optimizer criteira of relaxing geomtery on ML-potential
       ! This subroutine determines ml_chain 
      
@@ -1435,9 +1458,6 @@
       INTEGER :: nions, iu6
       REAL(q),DIMENSION(3,3) :: A
       REAL(q), DIMENSION(3,nions) :: init_R, posion
-      LOGICAL :: ml_sat
-      ! Outputs
-      LOGICAL :: ml_minmove
       ! Variables
       INTEGER :: ni, nj
       REAL(q) :: dmaxatom, dtemp, fmaxatom, ftemp
@@ -1446,7 +1466,6 @@
 
       ! Initiate logical
       not_trustable = .FALSE.
-      ml_minmove = .FALSE.
  
       ! Calculate maximum move per atom
       ! Here, positions are all in direct 
@@ -1478,7 +1497,6 @@
 
       ! Determine ml_chain value
       IF ( (not_trustable) .OR. &
-      !    (ml_minmove) .OR. &
            (ml_chain_iter-1 .GE. max_iter) ) THEN
         ml_chain = .FALSE.
       END IF

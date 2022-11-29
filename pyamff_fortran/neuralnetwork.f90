@@ -128,11 +128,6 @@ MODULE neuralnetwork
           fps(1:natoms_arr(i),1:nhidneurons(1),1,i)=actfunc(&
           fps(1:natoms_arr(i),1:nhidneurons(1),1,i),nhidneurons(1),natoms_arr(i),.FALSE.)
 
-          !Original code
-          !fps(1:natoms_arr(i),1:nhidneurons(1),1,i) = actfunc(&
-          !MATMUL(ordered_fps(1:natoms_arr(i),1:nGs(i),i),in_weights(1:nGs(i),1:nhidneurons(1),i)) &
-          !+ in_biases(1:natoms_arr(i),1:nhidneurons(1),i),nhidneurons(1),natoms_arr(i),.FALSE.)
-
           IF (actfuncId == 'silu') THEN
               ! Get sigmoid values
               fps2(1:natoms_arr(i),1:nhidneurons(1),1,i)=&
@@ -143,11 +138,6 @@ MODULE neuralnetwork
               fps2(1:natoms_arr(i),1:nhidneurons(1),1,i)=actfunc(&
               fps2(1:natoms_arr(i),1:nhidneurons(1),1,i),nhidneurons(1),natoms_arr(i),.TRUE.)
 
-              !Original code  
-              !fps2(1:natoms_arr(i),1:nhidneurons(1),1,i) = actfunc(&
-              !MATMUL(ordered_fps(1:natoms_arr(i),1:nGs(i),i),in_weights(1:nGs(i),1:nhidneurons(1),i))&
-              !+in_biases(1:natoms_arr(i),1:nhidneurons(1),i),nhidneurons(1),natoms_arr(i),.TRUE.)
-        
               ! gradient matrix of the first layer 
               in_gradients(1:natoms_arr(i),1:nGs(i),1:nhidneurons(1),i) = &
               grad(fps(1:natoms_arr(i),1:nhidneurons(1),1,i),in_weights(1:nGs(i),1:nhidneurons(1),i),&
@@ -176,11 +166,6 @@ MODULE neuralnetwork
               fps(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i)=actfunc(&
               fps(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i),nhidneurons(j+1),natoms_arr(i),.FALSE.)
 
-              !Original code        
-              !fps(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i) = actfunc(&
-              !MATMUL(fps(1:natoms_arr(i),1:nhidneurons(j),j,i),hid_weights(1:nhidneurons(j),1:nhidneurons(j+1),j,i)) &
-              !+ hid_biases(1:natoms_arr(i),1:nhidneurons(j+1),j,i), nhidneurons(j+1), natoms_arr(i),.FALSE.)
-
               IF (actfuncId == 'silu') THEN 
                   ! Get sigmoid values
                   fps2(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i)=&
@@ -192,12 +177,6 @@ MODULE neuralnetwork
                   fps2(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i)=actfunc(&
                   fps2(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i),nhidneurons(j+1),natoms_arr(i),.TRUE.)
 
-                  !Original code
-                  !fps2(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i) = actfunc(&
-                  !MATMUL(fps(1:natoms_arr(i),1:nhidneurons(j),j,i),hid_weights(1:nhidneurons(j),1:nhidneurons(j+1),j,i)) &
-                  !+ hid_biases(1:natoms_arr(i),1:nhidneurons(j+1),j,i),nhidneurons(j+1), natoms_arr(i),.TRUE.)
-                  
-                  ! gradient matrix from a hidden layer to the next hidden layer
                   hid_gradients(1:natoms_arr(i),1:nhidneurons(j),1:nhidneurons(j+1),j,i)= &
                   grad(fps(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i),hid_weights(1:nhidneurons(j),1:nhidneurons(j+1),j,i),&
                   natoms_arr(i),nhidneurons(j),nhidneurons(j+1),fps2(1:natoms_arr(i),1:nhidneurons(j+1),j+1,i))
@@ -220,10 +199,6 @@ MODULE neuralnetwork
               fps(k,1,nhidlayers+1,i)=fps(k,1,nhidlayers+1,i)+out_biases(i)
           END DO
           
-          !Original code
-          !fps(1:natoms_arr(i),:1,nhidlayers+1,i) = MATMUL(fps(1:natoms_arr(i),1:nhidneurons(nhidlayers),nhidlayers,i), &
-          !out_weights(1:nhidneurons(nhidlayers),:1,i)) + out_biases(1:natoms_arr(i),:1,i)
-
           ! gradient matrix from the last hidden layer to output layer
           DO l = 1, natoms_arr(i)
               out_gradients(l,1:nhidneurons(nhidlayers),1,i) = out_weights(1:nhidneurons(nhidlayers),1,i)
@@ -255,7 +230,6 @@ MODULE neuralnetwork
       ! Forces
       DO i = 1, total_natoms
           myid = symbols(i)
-          !myid = supersymbols(i) !Lei modified
           forces(1:3,i) = MATMUL(fp_primes(i,1,1:3,1:nGs(myid)),dEdGs(i,1:nGs(myid)))
           DO j = 1, nneighbors(i)
               m = neighborlists(i,j)
@@ -329,6 +303,7 @@ MODULE neuralnetwork
               print *, 'Unknown activation function type:',actfuncId, 'Check your mlff.pyamff file'
               stop
           END IF
+
     END FUNCTION
 
     FUNCTION grad(actval, weight, i, j, k, actval2) RESULT (gradient)

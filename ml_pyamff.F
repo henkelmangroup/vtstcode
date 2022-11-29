@@ -62,7 +62,7 @@
       LOGICAL LDUM
       REAL(q) RDUM
 
-      INTEGER :: i, in_maxnimg
+      INTEGER :: i, in_maxnimg, seedval
       CHARACTER*20 :: filename
  
       nions=T_INFO%nions
@@ -188,6 +188,14 @@
         STOP
       ENDIF
 
+      seedval=123456789
+      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_SEED','=','#',';','I', &
+                  seedval,RDUM,CDUM,LDUM,CHARAC,N,1,IERR)
+      IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
+         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_SEED'' from file INCAR.'
+         STOP
+      ENDIF
+
       !Assign number of atoms to the array type
       NAts(1:images_local)=nions
       !Prepare inputs of PyAMFF_init
@@ -201,7 +209,7 @@
       !TEMP: set maxnimg (memory issue on frontera)
       in_maxnimg=150
       CALL PyAMFF_init(NAts(1:images_local), nelement, images_local, & 
-      uniqEls(1:nelement), nat_arr(1:nelement,1:images_local),in_maxnimg,filename)
+      uniqEls(1:nelement), nat_arr(1:nelement,1:images_local),in_maxnimg,filename,seedval)
       !print *, 'pyamff_init is done in vasp side'
 
     END SUBROUTINE    
@@ -347,7 +355,7 @@
    
     SUBROUTINE ML_PyAMFF_cleanup
       IMPLICIT NONE
-     
+    
       IF (final_epoch /= 0) THEN
         CALL PyAMFF_clean(optType,.TRUE.)
       ELSE
@@ -356,7 +364,7 @@
 
     END SUBROUTINE
 
-    SUBROUTINE ml_pes(posion,latt_a,latt_b,Free,predF)
+    SUBROUTINE ml_pes(posion,latt_a,latt_b,Free,predE,predF)
       IMPLICIT NONE
       !Inputs
       REAL(q) :: posion(3,nions), latt_a(3,3), latt_b(3,3)
@@ -377,7 +385,7 @@
       CALL PyAMFF_calc(nions,posion,boxes(1:9,1),nat_arr(:,1),MAXVAL(nat_arr),&
       nelement,uniqEls,predE,predF)
       ! For frozen atoms
-      predF=predF*Free 
+      predF=predF*Free
       ! convert position back to direct coordinates
       CALL kardir(nions,posion,latt_b)
 

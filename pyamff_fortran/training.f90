@@ -12,7 +12,7 @@ MODULE training
     
     CONTAINS
 
-    SUBROUTINE train_init(nAtoms,nelement,max_fps,uniqElems,filename)
+    SUBROUTINE train_init(nAtoms,nelement,max_fps,uniqElems,filename,seedval)
         USE fpCalc
         IMPLICIT NONE
         !Inputs
@@ -20,6 +20,7 @@ MODULE training
         CHARACTER*3, DIMENSION(nelement) :: uniqElems
         !Optional inputs
         CHARACTER(*), OPTIONAL :: filename
+        INTEGER, OPTIONAL :: seedval
         !Variables
         INTEGER :: i, j, istat
         CHARACTER*3, DIMENSION(92) :: elementArray
@@ -31,15 +32,15 @@ MODULE training
         IF (istat == 6 .OR. istat == 29) THEN 
             !If file open is failed, load deafult fingerprints  
             ! 11/16/22: Loading default mlff is broken currently. It should be fixed.  
-            !PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
-            !', specified in INCAR. Hence default fpParas will be used!'
-            !CALL load_default_mlff(nelement, max_fps, uniqElems)
-            PRINT *, 'Error: Input file missing! Current version requires an input file,', filename 
-            STOP
+            PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
+            ', specified in INCAR. Hence default fpParas will be used!'
+            CALL load_default_mlff(nelement, max_fps, uniqElems, seedval)
+            !PRINT *, 'Error: Input file missing! Current version requires an input file,', filename 
+            !STOP
         ! Input file (filename) is found 
         ELSE
           !Read *.pyamff 
-          CALL read_mlff(nelement, max_fps, filename)
+          CALL read_mlff(nelement, max_fps, filename, seedval)
         END IF
  
         !backward initiation

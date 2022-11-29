@@ -6,7 +6,7 @@ MODULE PyAMFF
     CONTAINS
     
     SUBROUTINE PyAMFF_init(NAts, nelement, nimg, &
-    in_uniqElems, in_natarr, in_maxNimg, filename, uniqueNrs, atomicNrs)
+    in_uniqElems, in_natarr, in_maxNimg, filename, seedval, uniqueNrs, atomicNrs)
     !---------------------------------------------------------------------------------!
     !Initiate PyAMFF by allocating ImgInfo data type with maximum setup values.       !
     !Maximum number of images(max_nimg) is set to allow addition of images on the fly !
@@ -20,7 +20,7 @@ MODULE PyAMFF
       INTEGER, DIMENSION(nimg) :: NAts
       !Optional inputs
       !TODO: we should change optional to not optional
-      INTEGER, OPTIONAL :: in_maxNimg
+      INTEGER, OPTIONAL :: in_maxNimg, seedval
       CHARACTER*2, DIMENSION(nelement), OPTIONAL :: in_uniqElems
       INTEGER, DIMENSION(nelement),OPTIONAL :: uniqueNrs
       INTEGER, DIMENSION(nelement, nimg), OPTIONAL :: in_natarr
@@ -124,7 +124,7 @@ MODULE PyAMFF
       !It depends on if we pass the INCAR info in init or step
       !Initiate training (reading mlff, allocate arrays related to backward prop)
       IF (PRESENT(filename)) THEN
-        CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems,filename)
+        CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems,filename,seedval)
       ELSE  
         CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems)
       END IF
@@ -507,8 +507,6 @@ MODULE PyAMFF
       CALL normalizeFPs2(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
       max_natarr,sub_num_neigh,sub_neighs,symbols,ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:))
 
-      !print *, 'normalized'            
-
       CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),sub_neighs(:,1:MAXVAL(sub_num_neigh)),&
       symbols, in_atomidx, ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:), &
       MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
@@ -527,7 +525,7 @@ MODULE PyAMFF
       CHARACTER(*) :: opt_type
       LOGICAL :: opt_flag
 
-      IF (opt_flag) THEN 
+      IF (opt_flag) THEN
         CALL traincleanup(opt_type)
       ELSE
         CALL backcleanup
