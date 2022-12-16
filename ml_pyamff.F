@@ -27,7 +27,7 @@
     INTEGER, DIMENSION(:,:), ALLOCATABLE :: nat_arr !2nd dim is for consistency with PyAMFF structure
     LOGICAL :: initImg, newImg, eflag, fflag, global
     INTEGER :: maxEpochs
-    CHARACTER*8 :: optType, uq_method
+    CHARACTER*8 :: optType, conv_method
     CHARACTER*2, DIMENSION(:), ALLOCATABLE :: uniqEls
     REAL(q) :: force_coeff, force_tol, energy_tol, gradtol
     
@@ -118,15 +118,15 @@
       !Note: RDATAB subroutine is in /lib/drdatab.F
      
       ! Check uncertainty method 
-      uq_method='RMSE'
-      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_UQ','=','#',';','S', &
-      &            IDUM,RDUM,CDUM,LDUM,uq_method,N,LEN(filename),IERR)
+      conv_method='GRADNORM'
+      CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_CONV','=','#',';','S', &
+      &            IDUM,RDUM,CDUM,LDUM,conv_method,N,LEN(filename),IERR)
       IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
-          IF (iu0>=0) WRITE(iu0,*)'Error reading item ''PYAMFF_UQ'' from file INCAR.'
+          IF (iu0>=0) WRITE(iu0,*)'Error reading item ''PYAMFF_CONV'' from file INCAR.'
           STOP
       ENDIF
       
-      IF (uq_method == 'RMSE') THEN  
+      IF (conv_method == 'RMSE') THEN  
           energy_tol=0.001_q
           CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_ETOL','=','#',';','F', &
                   IDUM,energy_tol,CDUM,LDUM,CHARAC,N,1,IERR)
@@ -142,7 +142,7 @@
              IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FTOL'' from file INCAR.'
              STOP
           ENDIF
-      ELSE IF (uq_method == 'GRADNORM') THEN 
+      ELSE IF (conv_method == 'GRADNORM') THEN 
           ! This is for gradnorm as a model convergence criteria.
           gradtol=0.001_q
           CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_TOL','=','#',';','F', &
@@ -152,8 +152,8 @@
               STOP
           ENDIF
       ELSE 
-          IF (iu0>=0) WRITE(iu0,*) 'Value Error of ''PYAMFF_UQ'' from file INCAR.'
-          IF (iu0>=0) WRITE(iu0,*) 'Available values: ''RMSE, GRADNORM'
+          IF (iu0>=0) WRITE(iu0,*) 'Value Error of ''PYAMFF_CONV'' from file INCAR.'
+          IF (iu0>=0) WRITE(iu0,*) 'Available values: ''GRADNORM, RMSE'
       END IF
 
       force_coeff=1.00_q
@@ -309,21 +309,17 @@
         Free_all(:,:,1)=Free 
       END IF
      
-      ! TODO: Pass uq_method  
+      ! TODO: Pass conv_method  
       !Perform PyAMFF training
       IF (newImg) THEN
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
-          !eflag,fflag,Free_all,energy_tol,force_tol,&
-          !eflag,fflag,Free_all,gradtol,&   !This is for gradnorm as model convergence criteria
-           eflag,fflag,Free_all,uq_method,energy_tol,force_tol,gradtol,&
+           eflag,fflag,Free_all,conv_method,energy_tol,force_tol,gradtol,&
            NAts,nat_arr)
       ELSE
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
-          !eflag,fflag,Free_all,energy_tol,force_tol)
-          !eflag,fflag,Free_all,gradtol)    !This is for gradnorm as model convergence criteria
-           eflag,fflag,Free_all,uq_method,energy_tol,force_tol,gradtol)
+           eflag,fflag,Free_all,conv_method,energy_tol,force_tol,gradtol)
       END IF
 
       IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' Training information '

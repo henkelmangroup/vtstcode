@@ -50,8 +50,7 @@ MODULE training
 
     SUBROUTINE trainExec(nAtoms,pos_car,cell,symbols,nelement,uniq_elements,&
                 max_natarr,maxfps,opt_type,max_epoch,force_coeff,&
-                !energy_tol,force_tol,&
-                uq_method,energy_tol,force_tol,grad_tol,&
+                conv_method,energy_tol,force_tol,grad_tol,&
                 newImg,update_idx)
         USE nlist
         USE fpCalc
@@ -59,7 +58,7 @@ MODULE training
         IMPLICIT NONE
         !Inputs
         LOGICAL :: newImg
-        CHARACTER(*) :: opt_type, uq_method
+        CHARACTER(*) :: opt_type, conv_method
         INTEGER :: nAtoms, max_epoch, nelement, maxfps, max_natarr
         INTEGER, OPTIONAL :: update_idx
         CHARACTER*3, DIMENSION(nelement) :: uniq_elements
@@ -168,18 +167,18 @@ MODULE training
             !Timings
             CALL cpu_time(start)
             CALL Trainer(opt_type,max_epoch,MAXVAL(nGs),MAXVAL(nhidneurons),uniq_elements,&
-                force_coeff,uq_method,energy_tol,force_tol,grad_tol)
+                force_coeff,conv_method,energy_tol,force_tol,grad_tol)
             CALL cpu_time(finish)
             print *, 'Training Time: ', finish-start, "seconds"
         END IF
     END SUBROUTINE
    
     SUBROUTINE Trainer(opt_type,maxepochs,max_nGs,max_hidneurons,uniq_elements,&
-    fconst,uq_method,etol,ftol,gtol,&
+    fconst,conv_method,etol,ftol,gtol,&
     learningRate)
         IMPLICIT NONE
         !Inputs 
-        CHARACTER(*) :: opt_type, uq_method 
+        CHARACTER(*) :: opt_type, conv_method 
         INTEGER, INTENT(IN) :: maxepochs, max_nGs, max_hidneurons
         DOUBLE PRECISION :: fconst, etol, ftol, gtol
         DOUBLE PRECISION, OPTIONAL :: learningRate
@@ -203,7 +202,7 @@ MODULE training
         model_converge=.FALSE.
  
         ! Check uncertainty of model
-        CALL calc_model_uq(uq_method,etol,ftol,gtol,fconst,0,&
+        CALL calc_model_conv(conv_method,etol,ftol,gtol,fconst,0,&
         energyloss,forceloss,energyRMSE,forceRMSE,gradnorm,model_converge)
 
         IF (model_converge) GOTO 30
@@ -214,8 +213,8 @@ MODULE training
             !print *, 'epoch=', epoch
             !print *, '*********************************'
 
-            ! If uq_method is RMSE, backward propagation           
-            IF (uq_method == 'RMSE') CALL backward(fconst)
+            ! If conv_method is RMSE, backward propagation           
+            IF (conv_method == 'RMSE') CALL backward(fconst)
 
             IF (epoch == 1) THEN
                 CALL opt_init(opt_type)
@@ -261,8 +260,8 @@ MODULE training
               !print *, 'atomic info cleanup for this epoch'
             END DO
              
-            ! Check uq of model with updated parameters
-            CALL calc_model_uq(uq_method,etol,ftol,gtol,fconst,epoch,&
+            ! Check conv of model with updated parameters
+            CALL calc_model_conv(conv_method,etol,ftol,gtol,fconst,epoch,&
             energyloss,forceloss,energyRMSE,forceRMSE,gradnorm,model_converge)
 
             IF (model_converge) GOTO 30
@@ -272,7 +271,7 @@ MODULE training
         PRINT *, 'Maximum number of epochs reached but minimization NOT converged.'
         final_fRMSE=forceRMSE
         final_eRMSE=energyRMSE
-        IF (uq_method == 'GRADNORM') final_gradnorm=gradnorm
+        IF (conv_method == 'GRADNORM') final_gradnorm=gradnorm
         ! Print loss in the same unit (not squared)
         final_loss=energyRMSE+forceRMSE*fconst
         final_epoch=epoch-1
@@ -281,12 +280,12 @@ MODULE training
  
     END SUBROUTINE 
     
-    SUBROUTINE calc_model_uq(uq_method,etol,ftol,gtol,fconst,epoch,&
+    SUBROUTINE calc_model_conv(conv_method,etol,ftol,gtol,fconst,epoch,&
                 eloss,floss,eRMSE,fRMSE,gradnorm,model_converge)
       IMPLICIT NONE
       ! Inputs
       INTEGER :: epoch
-      CHARACTER(*) :: uq_method
+      CHARACTER(*) :: conv_method
       DOUBLE PRECISION :: etol, ftol, gtol, fconst
       ! Outputs
       LOGICAL :: model_converge
@@ -302,7 +301,7 @@ MODULE training
       eRMSE=sqrt(eloss/nimages)
       fRMSE=sqrt(floss/nimages)
   
-      IF (uq_method == 'RMSE') THEN
+      IF (conv_method == 'RMSE') THEN
           IF (eRMSE < etol .and. fRMSE < ftol) THEN
               final_fRMSE=fRMSE
               final_eRMSE=eRMSE
@@ -311,7 +310,7 @@ MODULE training
               PRINT *, 'Minimization converged'
               model_converge=.TRUE.
           END IF
-      ELSE IF (uq_method == 'GRADNORM') THEN
+      ELSE IF (conv_method == 'GRADNORM') THEN
           ! Backpropagation
           CALL backward(fconst)
           ! Calculate gradient magnitude (norm)
@@ -329,7 +328,7 @@ MODULE training
           END IF
       END IF
 
-    END SUBROUTINE calc_model_uq 
+    END SUBROUTINE calc_model_conv 
    
     SUBROUTINE calc_gradnorm(gradnorm)
     ! Calculate gradient magnitude to quantify uncertainty of our model.

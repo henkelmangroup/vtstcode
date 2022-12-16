@@ -149,7 +149,7 @@ MODULE PyAMFF
     SUBROUTINE PyAMFF_step(posions,trueEs,trueFs,boxes,nelement,in_nimg,totnimg,&
     max_epoch,max_natoms,opt_type,force_coeff,newImg,eflag,fflag,Frees,&
     !energy_tol,force_tol,&
-    uq_method,energy_tol,force_tol,grad_tol,&
+    conv_method,energy_tol,force_tol,grad_tol,&
     new_nat,in_natarr)
     !TODO: Adding multiple images to the training dataset
     !---------------------------------------------------------------------!
@@ -162,7 +162,7 @@ MODULE PyAMFF
       IMPLICIT NONE
       !Inputs
       INTEGER :: nelement, in_nimg, totnimg, max_epoch, max_natoms
-      CHARACTER(*) :: opt_type, uq_method
+      CHARACTER(*) :: opt_type, conv_method
       DOUBLE PRECISION :: force_coeff, energy_tol, force_tol, grad_tol
       LOGICAL :: newImg, eflag, fflag
       DOUBLE PRECISION, DIMENSION(in_nimg) :: trueEs
@@ -270,7 +270,7 @@ MODULE PyAMFF
         TrainImg(img)%cell,TrainImg(img)%symbols,nelement,uniqElems,&
         MAXVAL(TrainImg(img)%natoms_arr),MAXVAL(nGs),opt_type,&
         !max_epoch,force_coeff,energy_tol,force_tol,newImg,update_idx)
-        max_epoch,force_coeff,uq_method,energy_tol,force_tol,grad_tol,&
+        max_epoch,force_coeff,conv_method,energy_tol,force_tol,grad_tol,&
         newImg,update_idx)
       END DO
 
@@ -488,6 +488,7 @@ MODULE PyAMFF
 
       CALL calcfps(nAtoms, pos_car, cell, symbols, MAXVAL(nGs), nelement, forceEngine, &
                    fps, temp_dfps, neighs, num_neigh)
+      !print *, 'fps=', fps
       !print *, 'fp is calculated'
       CALL ghost_dfps_correct(nelement, nAtoms, MAXVAL(nGs), MAX_NEIGHS, num_neigh, neighs, &
            sub_num_neigh, sub_neighs, temp_dfps, dfps)
