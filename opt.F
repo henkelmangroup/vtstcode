@@ -198,8 +198,6 @@
         CALL qm_init(T_INFO,IO)
         !CALL fire_init(T_INFO,IO)
         CALL lbfgs_init(T_INFO,IO)
-        IO%MDOUT=100
-        IO%PESOUT=101
       ENDIF
       IF (iu6>=0) WRITE(iu6,*) ''
 
