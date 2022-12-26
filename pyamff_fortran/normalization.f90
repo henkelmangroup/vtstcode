@@ -259,7 +259,7 @@ MODULE normalize
         INTEGER, DIMENSION(nAtoms) :: nneighbors 
         INTEGER, DIMENSION(nAtoms) :: symbols
         INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
-        CHARACTER*3, DIMENSION(nelement) :: uniq_elements
+        CHARACTER*2, DIMENSION(nelement) :: uniq_elements
         DOUBLE PRECISION, DIMENSION(max_natoms_arr,maxfps,nelement) :: ordered_fps
         DOUBLE PRECISION, DIMENSION(nAtoms, max_nneighs+1, 3, maxfps) :: dfps
 

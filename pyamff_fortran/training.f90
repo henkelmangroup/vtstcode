@@ -17,7 +17,7 @@ MODULE training
         IMPLICIT NONE
         !Inputs
         INTEGER :: nAtoms, nelement, max_fps
-        CHARACTER*3, DIMENSION(nelement) :: uniqElems
+        CHARACTER*2, DIMENSION(nelement) :: uniqElems
         !Optional inputs
         CHARACTER(*), OPTIONAL :: filename
         INTEGER, OPTIONAL :: seedval
@@ -61,7 +61,7 @@ MODULE training
         CHARACTER(*) :: opt_type, conv_method
         INTEGER :: nAtoms, max_epoch, nelement, maxfps, max_natarr
         INTEGER, OPTIONAL :: update_idx
-        CHARACTER*3, DIMENSION(nelement) :: uniq_elements
+        CHARACTER*2, DIMENSION(nelement) :: uniq_elements
         INTEGER, DIMENSION(nAtoms) :: symbols
         DOUBLE PRECISION, DIMENSION(nAtoms,3) :: pos_car
         DOUBLE PRECISION, DIMENSION(3,3) :: cell
@@ -182,7 +182,7 @@ MODULE training
         INTEGER, INTENT(IN) :: maxepochs, max_nGs, max_hidneurons
         DOUBLE PRECISION :: fconst, etol, ftol, gtol
         DOUBLE PRECISION, OPTIONAL :: learningRate
-        CHARACTER*3, DIMENSION(nelements) :: uniq_elements 
+        CHARACTER*2, DIMENSION(nelements) :: uniq_elements 
         !Must be input variables eventually
         DOUBLE PRECISION :: beta1, beta2, eps, weight_decay
         !variables
@@ -350,7 +350,7 @@ MODULE training
       IMPLICIT NONE
       !Inputs
       INTEGER :: nelement
-      CHARACTER*3, DIMENSION(nelement) :: uniq_elements
+      CHARACTER*2, DIMENSION(nelement) :: uniq_elements
       !Variables
       INTEGER :: i, l
 

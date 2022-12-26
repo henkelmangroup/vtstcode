@@ -1804,33 +1804,6 @@ MODULE fpCalc
             !print *, 'out_biases=', out_biases(i)
         END DO
         
-        CONTAINS
-        
-        FUNCTION lcg(s)
-          IMPLICIT NONE
-          INTEGER :: lcg
-          INTEGER(kind=8) :: s
-          
-          IF (s == 0) THEN 
-              s = 104729
-          ELSE
-              s = mod(s, INT8(4294967296))
-          END IF
-          s = mod(s * INT8(279470273), INT8(4294967291))
-          lcg = int(mod(s, int(huge(0), kind=8)), kind(0))
-        END FUNCTION
-        
-        FUNCTION irand_gen RESULT(irand)
-          USE, INTRINSIC :: ISO_Fortran_env
-          REAL(REAL32) :: r
-          INTEGER :: irand
-
-          CALL random_number(r)
-
-          irand = floor( r*6._REAL32 )
-        
-        END FUNCTION
-
     END SUBROUTINE
 
 !    SUBROUTINE write_mlff(nelement,uniq_elements,trained)
