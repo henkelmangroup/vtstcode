@@ -323,8 +323,9 @@
       END IF
 
       IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' Training information '
-      IF (iu6>=0) WRITE(iu6,'(A)') 'epoch    lossValue   EnergyRMSE    ForceRMSE'
-      IF (iu6>=0) WRITE(iu6,'(I6,F16.8,F16.8,F16.8)') final_epoch, final_loss, final_eRMSE, final_fRMSE
+      IF (iu6>=0) WRITE(iu6,'(A)') '          epoch      lossValue       EnergyRMSE       ForceRMSE'
+      IF (iu6>=0) WRITE(iu6,'(A)') '        ---------------------------------------------------------'  
+      IF (iu6>=0) WRITE(iu6,'(A7,I6,F16.8,F16.8,F16.8)') 'Final: ',final_epoch, final_loss, final_eRMSE, final_fRMSE
 
       ! Pd111_H: evolution of PES
       !pes_posion=posion
