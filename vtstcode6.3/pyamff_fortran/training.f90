@@ -31,7 +31,6 @@ MODULE training
         OPEN(55, FILE=filename, STATUS='old', IOSTAT=istat)
         IF (istat == 6 .OR. istat == 29) THEN 
             !If file open is failed, load deafult fingerprints  
-            ! 11/16/22: Loading default mlff is broken currently. It should be fixed.  
             !PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
             !', specified in INCAR. Hence default fpParas will be used!'
             !CALL load_default_mlff(nelement, max_fps, uniqElems, seedval)

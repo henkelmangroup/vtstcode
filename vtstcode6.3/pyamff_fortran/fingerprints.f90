@@ -8,7 +8,7 @@ MODULE fpCalc
     IMPLICIT NONE
     PRIVATE
     PUBLIC :: read_fpParas, read_mlffParas, calcg2s, calcfps, cleanup, read_mlff, calcg1s
-    PUBLIC :: load_default_mlff, atomsCleanup
+    PUBLIC :: load_default_mlff, load_default_mlff_gr, atomsCleanup
     TYPE (fingerprints),DIMENSION(:),ALLOCATABLE,SAVE :: fpParas
     DOUBLE PRECISION, SAVE :: max_rcut   !fetch rcut from fpParas
     CHARACTER*2, DIMENSION(:), ALLOCATABLE :: uniq_elements
@@ -1577,7 +1577,7 @@ MODULE fpCalc
         INTEGER, INTENT(IN) :: nelement, MAX_FPS, seedval
         CHARACTER*2, DIMENSION(nelement), INTENT(IN) :: uniqElems
         !Variables
-        INTEGER :: i, j, k, nFPs
+        INTEGER :: i, j, k, nFPs, accN
         CHARACTER(LEN=30) :: model_type
         DOUBLE PRECISION, DIMENSION(4) :: g1_etas
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights, flatten_hidweights
@@ -1703,6 +1703,8 @@ MODULE fpCalc
         DO i=1, nelement
             fpParas(i)%g1_endpoint=fpParas(i)%tnFPs
             fpParas(i)%g2_startpoint=fpParas(i)%g1_endpoint+1
+        END DO
+        DO i=1, nelement
             DO j=1, nelement
                 DO k=1, nelement
                     fpParas(i)%g2s(j,k)%fp_type='G2'
@@ -1718,11 +1720,58 @@ MODULE fpCalc
                     fpParas(i)%g2s(j,k)%zetas(2) = 4.0
                     fpParas(i)%g2s(j,k)%zetas(3) = 1.0 
                     fpParas(i)%g2s(j,k)%zetas(4) = 4.0
-                    fpParas(i)%tnFPs=fpParas(i)%tnFPs+4
+                END DO
+            END DO
+            fpParas(i)%tnFPs=fpParas(i)%tnFPs+4
+        END DO
+        
+        DO i = 1, nelement
+            DO j = 1, nelement
+                DO k = j, nelement
+                    IF (fpParas(i)%g2s(j, k)%nFPs .EQ. 0) THEN
+                        accN = 0
+                    ELSE
+                        accN = 1
+                    END IF
+
+                    IF ((j .EQ. 1) .AND. (k .EQ. 1)) THEN
+                        fpParas(i)%g2s(j, k)%startpoint = fpParas(i)%g1_endpoint + accN
+                    ELSE
+                        IF (j .EQ. k) THEN
+                            fpParas(i)%g2s(j, k)%startpoint = fpParas(i)%g2s(j-1, nelement)%endpoint+accN
+                        ELSE
+                            fpParas(i)%g2s(j, k)%startpoint = fpParas(i)%g2s(j, k-1)%endpoint+accN
+                        END IF
+                    END IF
+                    IF (accN .EQ. 0) THEN
+                        fpParas(i)%g2s(j, k)%endpoint = fpParas(i)%g2s(j, k)%startpoint
+                    ELSE
+                        fpParas(i)%g2s(j, k)%endpoint = fpParas(i)%g2s(j, k)%startpoint + fpParas(i)%g2s(j, k)%nFPs - 1
+                    END IF
                 END DO
             END DO
         END DO
-        
+
+        DO i = 1, nelement
+            DO j = 1, nelement
+                DO k = 1, j - 1
+                    !print *, i, j, k
+                    IF (fpParas(i)%g2s(j,k)%nFPs .GT. 0) THEN
+                        fpParas(i)%g2s(j, k)%etas       =  fpParas(i)%g2s(k, j)%etas
+                        fpParas(i)%g2s(j, k)%zetas      =  fpParas(i)%g2s(k, j)%zetas
+                        fpParas(i)%g2s(j, k)%lambdas    =  fpParas(i)%g2s(k, j)%lambdas
+                        fpParas(i)%g2s(j, k)%theta_ss   =  fpParas(i)%g2s(k, j)%theta_ss
+                        fpParas(i)%g2s(j, k)%r_cuts     =  fpParas(i)%g2s(k, j)%r_cuts
+                        fpParas(i)%g2s(j, k)%startpoint =  fpParas(i)%g2s(k, j)%startpoint
+                        fpParas(i)%g2s(j, k)%endpoint   =  fpParas(i)%g2s(k, j)%endpoint
+                    END IF
+                END DO
+            END DO
+        END DO
+
+        !Set max_rcut
+        max_rcut=3.0
+ 
         !Make sure nelements are known
         nelements=nelement
 
@@ -1749,58 +1798,128 @@ MODULE fpCalc
         intercept=0.0
 
     END SUBROUTINE
-   
+    
+    SUBROUTINE load_default_mlff_gr(nelement, MAX_FPS, uniqElems, seedval, pos_car, nAtoms)
+    ! Calculate g(r) and g(theta) of input configuration(s) and
+    ! generate fingerprint parameters and neural nets
+        !Inputs
+        INTEGER, INTENT(IN) :: nelement, MAX_FPS, seedval, nAtoms
+        CHARACTER*2, DIMENSION(nelement), INTENT(IN) :: uniqElems
+        DOUBLE PRECISION, DIMENSION(nAtoms,3), INTENT(IN) :: pos_car
+        !Variables
+        INTEGER :: i, j, k, nFPs
+        CHARACTER(LEN=30) :: model_type
+        DOUBLE PRECISION, DIMENSION(4) :: g1_etas
+        DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights, flatten_hidweights
+
+        print *, 'load default mlff gr subroutine is called'
+
+        ALLOCATE(coheEs(nelement))
+        use_cohesive_energy = .FALSE.
+
+        nG1 = 0
+        nG2 = 0
+        ALLOCATE(rmins(nelement, nelement))
+        rmins = 0.0
+
+        ALLOCATE (uniq_elements(nelement))
+        ALLOCATE(nGs(nelement))
+        ALLOCATE(fpminvs(MAX_FPS, nelement))
+        ALLOCATE(fpmaxvs(MAX_FPS, nelement))
+        ALLOCATE(diffs(MAX_FPS, nelement))
+        nGs = 0
+        fpminvs = 0
+        fpmaxvs = 0
+        diffs = 0
+
+        ALLOCATE(fpParas(nelement))
+        DO i = 1, nelement
+            ALLOCATE(fpParas(i)%g1s(nelement))
+            ALLOCATE(fpParas(i)%g2s(nelement, nelement))
+            fpParas(i)%tnFPs = 0
+            fpParas(i)%g1_startpoint = 0
+            fpParas(i)%g1_endpoint = 0
+            fpParas(i)%g2_startpoint = 0
+            fpParas(i)%g2_endpoint = 0
+            DO j = 1, nelement
+                fpParas(i)%g1s(j)%startpoint = 0
+                fpParas(i)%g1s(j)%endpoint = 0
+                fpParas(i)%g1s(j)%nFPs = 0
+                fpParas(i)%g1s(j)%currIndex = 0
+                DO k = 1, nelement
+                    fpParas(i)%g2s(j, k)%startpoint = 0
+                    fpParas(i)%g2s(j, k)%endpoint = 0
+                    fpParas(i)%g2s(j, k)%nFPs = 0
+                    fpParas(i)%g2s(j, k)%currIndex = 0
+                END DO
+            END DO
+        END DO
+
+        ! TODO ----------------------------------------------
+        ! Calculate g(r) of input configuration (pos_car)
+
+        ! Calculate g(theta) of input configuration
+
+        ! Set number of fingerprints, g1 (fpParas%g1(s)%nFPs), g2s (fpParas%g2(s)%nFPs, and nGs of each element 
+
+        ! ---------------------------------------------------
+
+        !Make sure nelements are known
+        nelements=nelement
+
+        !Load default NN 
+        model_type='BP'
+        actfuncId='tanh'
+        nhidlayers=2
+        ALLOCATE(nhidneurons(nhidlayers))
+        !nhidneurons=(/5,5/)
+        nhidneurons=(/10,10/)
+        ALLOCATE (in_weights(MAXVAL(nGs),nhidneurons(1),nelements))
+        ALLOCATE (in_biases(nhidneurons(1),nelements))
+        ALLOCATE (hid_weights(MAXVAL(nhidneurons),MAXVAL(nhidneurons),nhidlayers-1,nelements))
+        ALLOCATE (hid_biases(MAXVAL(nhidneurons),nhidlayers-1,nelements))
+        ALLOCATE (out_weights(MAXVAL(nhidneurons),1,nelements))
+        ALLOCATE (out_biases(nelements))
+
+        !Initialize random NN parameters
+        CALL initialize_NN_params(uniqElems, seedval)
+
+        !Set scaler type, slope and intercept
+        scaler_type='NoScaler'
+        slope=1.0
+        intercept=0.0
+
+    END SUBROUTINE load_default_mlff_gr
+    
     SUBROUTINE initialize_NN_params(uniqElems, seedval)
-    !Reference: https://gcc.gnu.org/onlinedocs/gcc-6.4.0/gfortran/RANDOM_005fSEED.html
+        USE mtmod
         IMPLICIT NONE
         !Inputs
         CHARACTER*2, DIMENSION(nelements), INTENT(IN) :: uniqElems
         INTEGER :: seedval
         !Variables
-        INTEGER :: i, j, n, dt(8), pid, getpid, irand
-        INTEGER, ALLOCATABLE :: seed(:)
-        INTEGER(kind=8) :: t
+        INTEGER :: i, j, k
 
-        print *, 'NN parameters are generated by fortran'
-        CALL random_seed(size=n)
-        allocate(seed(n))
-        !CALL system_clock(t)
-        !IF (t==0) THEN 
-        !    CALL date_and_time(values=dt)
-        !    t=(dt(1) - 1970) * INT8(365) * 24 * 60 * 60 * 1000 &
-        !     + dt(2) * INT8(31) * 24 * 60 * 60 * 1000 &
-        !     + dt(3) * INT8(24) * 60 * 60 * 1000 &
-        !     + dt(5) * 60 * 60 * 1000 &
-        !     + dt(6) * 60 * 1000 + dt(7) * 1000 &
-        !     + dt(8)
-        !END IF
-        !pid=getpid()
-        ! To generate the same random numbers for every MPIs
-        !pid=0
-        !t=ieor(t,int(pid,kind(t)))
-        !DO i=1, n 
-        !    seed(i)=lcg(t)
-        !END DO
-
-        ! TEMP: To generate the same parameters for every MPIs
-        !print *, 'seedval=', seedval
-        seed=seedval
-        CALL random_seed(put=seed)
+        print *, 'NN parameters are randomly generated by fortran'
 
         DO i=1, nelements
-            CALL random_number(in_weights(1:nGs(i),1:nhidneurons(1),i))
+            DO k=1, nGs(i)
+                CALL gather_grnd(in_weights(k,1:nhidneurons(1),i),nhidneurons(1),seedval)
+            END DO
             !print *, 'in_weights=', in_weights(1:nGs(i),1:nhidneurons(1),i)
-            CALL random_number(in_biases(1:nhidneurons(1),i))
+            CALL gather_grnd(in_biases(1:nhidneurons(1),i),nhidneurons(1),seedval)
             !print *, 'in_biases=', in_biases(1:nhidneurons(1),i)
             DO j=1, nhidlayers-1
-                CALL random_number(hid_weights(1:nhidneurons(j),1:nhidneurons(j+1),j,i))
+                DO k=1, nhidneurons(j)
+                    CALL gather_grnd(hid_weights(k,1:nhidneurons(j+1),j,i),nhidneurons(j+1),seedval)
+                END DO
                 !print *, 'hid_weights=', hid_weights(1:nhidneurons(j),1:nhidneurons(j+1),j,i)
-                CALL random_number(hid_biases(1:nhidneurons(j+1),j,i))
+                CALL gather_grnd(hid_biases(1:nhidneurons(j+1),j,i),nhidneurons(j+1),seedval)
                 !print *, 'hid_biases=', hid_biases(1:nhidneurons(j+1),j,i)
             END DO
-            CALL random_number(out_weights(1:nhidneurons(nhidlayers),1,i))
+            CALL gather_grnd(out_weights(1:nhidneurons(nhidlayers),1,i),nhidneurons(nhidlayers),seedval)
             !print *, 'out_weights=', out_weights(1:nhidneurons(nhidlayers),1,i)
-            CALL random_number(out_biases(i))
+            out_biases(i)=grnd(seedval)
             !print *, 'out_biases=', out_biases(i)
         END DO
         

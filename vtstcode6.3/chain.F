@@ -426,7 +426,7 @@
 
         ELSE
           IF (IU6>=0) WRITE(IU6,4696) fmaxatom
- 4696     FORMAT(1x,' ML predicted forces: max atom ',2f12.6)
+ 4696     FORMAT(1x,' ML-PyAMFF:',' ML-Forces: max atom ',2f12.6)
           !IF (ICHAIN == 0) THEN 
           !  IF (IU6>=0) WRITE(IU6,*) 'ML-predicted true force fmaxatom=',ml_fmaxatom
           !END IF
@@ -560,8 +560,7 @@
 
     IF (IOPT==8 .AND. (ml_chain_iter > 1)) THEN
       ! Write ML-chain usage info 
-      IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' ML-Chain information  '
-      IF (iu6>=0) WRITE(iu6,'(A29,I6)') 'Number of ML-potential used: ',ml_chain_iter-1
+      IF (iu6>=0) WRITE(iu6,'(A11,A29,I6)') 'ML-PyAMFF:', ' Number of ML-potential used: ',ml_chain_iter-1
 
       ! Return to the correct force
       force = force_mlreturn

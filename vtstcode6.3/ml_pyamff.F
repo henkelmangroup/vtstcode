@@ -188,7 +188,7 @@
         STOP
       ENDIF
 
-      seedval=123456789
+      seedval=4357
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_SEED','=','#',';','I', &
                   seedval,RDUM,CDUM,LDUM,CHARAC,N,1,IERR)
       IF (((IERR/=0).AND.(IERR/=3)).OR. ((IERR==0).AND.(N<1))) THEN
@@ -323,9 +323,9 @@
       END IF
 
       IF (iu6>=0) WRITE(iu6,'(A11,A)') 'ML-PyAMFF:',' Training information '
-      IF (iu6>=0) WRITE(iu6,'(A)') '          epoch      lossValue       EnergyRMSE       ForceRMSE'
-      IF (iu6>=0) WRITE(iu6,'(A)') '        ---------------------------------------------------------'  
-      IF (iu6>=0) WRITE(iu6,'(A7,I6,F16.8,F16.8,F16.8)') 'Final: ',final_epoch, final_loss, final_eRMSE, final_fRMSE
+      IF (iu6>=0) WRITE(iu6,'(A11,A7,A)') 'ML-PyAMFF:','       ',' epoch      lossValue       EnergyRMSE       ForceRMSE'
+      IF (iu6>=0) WRITE(iu6,'(A11,A7,A)') 'ML-PyAMFF:','-------','------------------------------------------------------'  
+      IF (iu6>=0) WRITE(iu6,'(A11,A7,I6,F16.8,F16.8,F16.8)') 'ML-PyAMFF:',' Final: ',final_epoch, final_loss, final_eRMSE, final_fRMSE
 
       ! Pd111_H: evolution of PES
       !pes_posion=posion
