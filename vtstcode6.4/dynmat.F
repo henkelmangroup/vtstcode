@@ -254,9 +254,9 @@
       node=COMM_CHAIN%NODE_ME
       CALL MAKE_DIR_APP(node)
       CALL RD_POSCAR_HEAD(LATT_CUR, T_I, &
-           NIOND,NIONPD, NTYPD,NTYPPD, IO%IU0, IO%iu6)
-      CALL RD_POSCAR(LATT_CUR, T_I, DYN, &
-           NIOND,NIONPD, NTYPD,NTYPPD,IO%IU0, IO%iu6)
+           NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%iu6)
+      CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, &
+           NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%iu6)
 
       IF (T_I%NIONS /= T_INFO%NIONS) THEN
          IF (iu0>=0) WRITE(iu0,*)'ERROR: image mode number of ions wrong'

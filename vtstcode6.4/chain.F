@@ -128,6 +128,7 @@
       TYPE (latt):: LATT_CUR
       TYPE (TYPE_info) :: T_I
       TYPE (dynamics) :: DYN
+      TYPE(nh_chains) :: NHC
       TYPE (in_struct) :: IO
 
       INTEGER node
@@ -195,7 +196,7 @@
         ! Read the NEWCAR in.
         IF (newcar_exists) THEN
           CALL RD_POSCAR_HEAD(LATT_CUR, T_I, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
-          CALL RD_POSCAR(LATT_CUR, T_I, DYN, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
+          CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
           posion = DYN%POSION
           CALL unlink("NEWCAR")
         ENDIF
@@ -1076,6 +1077,7 @@
       TYPE (latt)::       LATT_CUR
       TYPE (type_info) :: T_I
       TYPE (dynamics)  :: DYN
+      TYPE(nh_chains) :: NHC
       INTEGER     IDUM,IERR,N,idir,node
       CHARACTER (1)   CHARAC
       COMPLEX(q)  CDUM  ; LOGICAL  LDUM
@@ -1274,7 +1276,7 @@
       IF(IMAGES==0) THEN
           CALL RD_POSCAR_HEAD(LATT_CUR, T_I, &
                NIOND,NIONPD, NTYPD,NTYPPD, IO%IU0, IO%IU6)
-          CALL RD_POSCAR(LATT_CUR, T_I, DYN, &
+          CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, &
                NIOND,NIONPD, NTYPD,NTYPPD, IO%IU0, IO%IU6)
 
           IF (T_I%NIONS /= T_INFO%NIONS) THEN
@@ -1404,7 +1406,7 @@
 
          CALL RD_POSCAR_HEAD(LATT_CUR, T_I, &
               NIOND,NIONPD, NTYPD,NTYPPD, IO%IU0, IO%IU6)
-         CALL RD_POSCAR(LATT_CUR, T_I, DYN, &
+         CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, &
               NIOND,NIONPD, NTYPD,NTYPPD, &
               IO%IU0, IO%IU6)
 
@@ -1418,7 +1420,7 @@
 
          CALL RD_POSCAR_HEAD(LATT_CUR, T_I, &
               NIOND,NIONPD, NTYPD,NTYPPD, IO%IU0, IO%IU6)
-         CALL RD_POSCAR(LATT_CUR, T_I, DYN, &
+         CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, &
               NIOND,NIONPD, NTYPD,NTYPPD, &
               IO%IU0, IO%IU6)
 
