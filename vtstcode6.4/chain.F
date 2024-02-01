@@ -176,17 +176,20 @@
 !!!
 
       ! Interactive Mode only have rank 0 process write data
-      IF (LINTERACT .AND. IU6>0) THEN
-        ! Write the force-energy file.
-        WRITE(*,*) 'LINTERACT: Writing FU file.'
-        OPEN(UNIT = 1, FILE = "FU")
-        WRITE(1, *) toten
-        DO ni=1,nions
-          WRITE(1, *) force(1, ni), force(2, ni), force(3, ni)
-        ENDDO
-        CLOSE(1)
-        ! Wait for the NEWCAR or STOPCAR.
-        WRITE(*,*) 'LINTERACT: Waiting for NEWCAR.'
+!      IF (LINTERACT .AND. IU6>0) THEN
+      IF (LINTERACT) THEN
+        IF (IU6>0) THEN
+          ! Write the force-energy file.
+          WRITE(*,*) 'LINTERACT: Writing FU file.'
+          OPEN(UNIT = 1, FILE = "FU")
+          WRITE(1, *) toten
+          DO ni=1,nions
+            WRITE(1, *) force(1, ni), force(2, ni), force(3, ni)
+          ENDDO
+          CLOSE(1)
+          ! Wait for the NEWCAR or STOPCAR.
+          WRITE(*,*) 'LINTERACT: Waiting for NEWCAR.'
+        ENDIF
         DO
           INQUIRE(FILE = "STOPCAR", EXIST = stopcar_exists)
           INQUIRE(FILE = "NEWCAR", EXIST = newcar_exists)
@@ -198,6 +201,11 @@
           CALL RD_POSCAR_HEAD(LATT_CUR, T_I, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
           CALL RD_POSCAR(LATT_CUR, T_I, DYN, NHC, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
           posion = DYN%POSION
+        ENDIF
+#if defined(MPI) || defined(MPI_CHAIN)
+        CALLMPI(MPI_Barrier(comm_chain%mpi_comm, ierr))
+#endif
+        IF (IU6>0) THEN       
           CALL unlink("NEWCAR")
         ENDIF
       ENDIF
