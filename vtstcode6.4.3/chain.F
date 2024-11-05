@@ -589,6 +589,61 @@
 
     END SUBROUTINE chain_force
 
+
+    !>
+    !> averaging the stress tensor when using
+    !> VCAIMAGES.
+    !>
+    !> Function is only called for DYN%ISIF > 0
+    !>@param stress stress tensor which will be averaged over
+    !> the two molecular dynamics streams
+    !>
+    SUBROUTINE chain_stress( stress )
+
+       implicit none
+       REAL(q),intent( inout ) :: stress(3,3)
+       REAL(q)                 :: stress_all(3,3,2)
+       INTEGER                 :: node
+
+       IF ( images == 0 ) RETURN
+       IF ( spring == -1000 ) RETURN
+
+#if defined(MPI) || defined (MPI_CHAIN)
+       node = comm_chain%node_me
+
+!======================================================================
+! Parallel tempering return
+!======================================================================
+       IF ( LTEMPER ) THEN
+          RETURN
+!======================================================================
+! VCA average stresses over two images
+!======================================================================
+       ELSE IF ( LVCAIMAGES ) THEN
+          stress_all(:,:,1:2)  = 0
+          stress_all(:,:,node) = stress
+#ifndef old_vca
+          ! first core in image merges the data
+          IF ( comm%node_me == 1 ) THEN
+             !! 3x3 stress components and two molecular dynamics streams
+             CALLMPI_C( M_sum_d( comm_chain, stress_all(1,1,1), 3*3*2))
+             stress(:,:)=stress_all(:,:,1)*VCAIMAGES+stress_all(:,:,2)*(1-VCAIMAGES)
+          ELSE
+             stress=0
+          ENDIF
+          ! now sum over all cores in one image
+          CALLMPI_C( M_sum_d( comm, stress( 1, 1 ), 3*3 ) )
+#else
+          !! 3x3 stress components and two molecular dynamics streams
+          CALLMPI_C( M_sum_d( comm_chain, stress_all( 1, 1, 1 ), 3*3*2 ) )
+          stress = 0
+          stress( : , : ) = stress_all( :, :, 1 ) * VCAIMAGES + stress_all( :, :, 2 ) * ( 1 - VCAIMAGES )
+          RETURN
+#endif
+       END IF
+#endif
+    END SUBROUTINE chain_stress
+
 !**********************************************************************
 !
 ! there are several points where a global sum between chains
@@ -739,10 +794,10 @@
 
       ENDDO
 
-         IF (IU6>=0) WRITE(IU6,'(A,16F14.7)') ' parallel tempering old TOTEN ', (TOTEN_all(ID(I)),I=1,images)
-         IF (IU6>=0) WRITE(IU6,'(A,16F14.7)') ' parallel tempering old TEBEG ', TEBEG_old
-         IF (IU6>=0) WRITE(IU6,'(A,16F14.7)') ' parallel tempering new TEBEG ', TEBEG_new
-         IF (IU6>=0) WRITE(IU6,'(A,16F14.7)') ' Acceptance ratio for swaps          ', REAL(SUCCESS,q)/MAX(1,ATTEMPTS)
+         IF (IU6>=0) WRITE(IU6,'(A,99F14.7)') ' parallel tempering old TOTEN ', (TOTEN_all(ID(I)),I=1,images)
+         IF (IU6>=0) WRITE(IU6,'(A,99F14.7)') ' parallel tempering old TEBEG ', TEBEG_old
+         IF (IU6>=0) WRITE(IU6,'(A,99F14.7)') ' parallel tempering new TEBEG ', TEBEG_new
+         IF (IU6>=0) WRITE(IU6,'(A,99F14.7)') ' Acceptance ratio for swaps          ', REAL(SUCCESS,q)/MAX(1,ATTEMPTS)
 
          DO I=1,images
             IF ( ID(I)==node) THEN
