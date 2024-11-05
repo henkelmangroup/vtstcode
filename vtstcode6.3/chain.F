@@ -200,6 +200,7 @@
           CALL RD_POSCAR_HEAD(LATT_CUR, T_I, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
           CALL RD_POSCAR(LATT_CUR, T_I, DYN, NIOND, NIONPD, NTYPD, NTYPPD, IO%IU0, IO%IU6)
           posion = DYN%POSION
+        ENDIF
 #if defined(MPI) || defined(MPI_CHAIN)
         CALLMPI(MPI_Barrier(comm_chain%mpi_comm, ierr))
 #endif
