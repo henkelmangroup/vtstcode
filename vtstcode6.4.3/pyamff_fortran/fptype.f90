@@ -38,6 +38,8 @@ MODULE fpType
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: theta_ss
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: fp_maxs
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: fp_mins
+        DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: g2   
+        DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: dg2
     END TYPE g2_paras
 
     TYPE :: fingerprints
@@ -60,6 +62,11 @@ MODULE fpType
         !DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: dgdxs
         TYPE(derivatives), DIMENSION(:), ALLOCATABLE :: dgdxs
     END TYPE
+
+    TYPE :: fingerprints_simple
+        character(len = 100), dimension(:), allocatable :: g1
+        character(len = 100), dimension(:), allocatable :: g2
+    END TYPE fingerprints_simple
 
     CONTAINS
 

@@ -137,6 +137,8 @@
       REAL(q) :: dft_fmaxatom, ml_fmaxatom, toten_ml
       REAL(q), DIMENSION(3,nions) :: force_mlreturn, force_ml, init_R, posion_ml
 
+      IF (iu6>=0) WRITE(iu6,*) 'into chain_force'
+      IF (iu6>=0) WRITE(iu6,*) 'FREE: ',Free
 #if defined(MPI) || defined (MPI_CHAIN)
       node = comm_chain%node_me
 
@@ -178,7 +180,6 @@
       IF (LINTERACT) THEN
         IF (IU6>0) THEN
           ! Write the force-energy file.
-          WRITE(*,*) 'LINTERACT: Writing FU file.'
           OPEN(UNIT = 1, FILE = "FU")
           WRITE(1, *) toten
           DO ni = 1,nions
@@ -525,7 +526,7 @@
                 ELSE
                   force_mlreturn = force
                 END IF
-              ! Else, check if ml-pes should be trusted or not
+              ! Else, check if ml-pes should be trustable or not
               ELSE
                 CALL ML_chain_criteria(nions, init_R, posion, A, iu6)
               END IF
@@ -578,7 +579,7 @@
       END IF
     END IF
 
-    IF (IOPT == 8 .AND. (ml_cleanup)) CALL ML_PyAMFF_cleanup
+    IF (IOPT==8 .AND. (ml_cleanup)) CALL ML_PyAMFF_cleanup
 
     ! return unprojected stress vasp
     stress = stress_vasp
@@ -1560,7 +1561,7 @@
       END IF
   
       CALLMPI_C(or_chain(ml_chain)) 
-
+      !print  *, ' END OF ML_chain_criteria'
     END SUBROUTINE ML_chain_criteria
     
 END MODULE chain

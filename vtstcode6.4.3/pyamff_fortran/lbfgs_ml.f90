@@ -247,14 +247,17 @@ MODULE lbfgs_ml
     ! probably a cleaner way to write this involves saving indices from gather_flat_grad, but this works
     IMPLICIT NONE
     ! other variables
-    INTEGER :: offset, i, l
+    INTEGER :: offset, i, l, k
 
     ! update input biases
     offset=0
     DO i=1, nelements
-      in_biases(1:nhidneurons(1),i)=in_biases(1:nhidneurons(1),i)&
-      +step*d((offset+1):(offset+nhidneurons(1)))
-      offset=offset+SUM(nhidneurons)+1
+      DO k=1, natoms_arr(i)        
+        in_biases(k,1:nhidneurons(1),i)=in_biases(k,1:nhidneurons(1),i)&
+        +step*d((offset+1):(offset+nhidneurons(1)))
+        offset=offset+SUM(nhidneurons)+1
+      END DO
+      
     END DO
 
     ! update input weights
@@ -270,8 +273,10 @@ MODULE lbfgs_ml
     DO i=1, nelements
       DO l=1, nhidlayers-1
         offset=offset+nhidneurons(l)
-        hid_biases(1:nhidneurons(l+1),l,i)=hid_biases(1:nhidneurons(l+1),l,i)&
-        +step*d(offset+1:offset+nhidneurons(l+1)) ! no need to reshape here
+        DO k=1, natoms_arr(i)        
+          hid_biases(k,1:nhidneurons(l+1),l,i)=hid_biases(k,1:nhidneurons(l+1),l,i)&
+          +step*d(offset+1:offset+nhidneurons(l+1)) ! no need to reshape here
+        END DO
       END DO
       offset=offset+nhidneurons(nhidlayers)+1
     END DO
@@ -295,7 +300,9 @@ MODULE lbfgs_ml
     offset = 0
     DO i=1, nelements
       offset = offset+SUM(nhidneurons)+1
-      out_biases(i) = out_biases(i) + step*d(offset)
+      DO k=1, natoms_arr(i)
+        out_biases(k,1,i) = out_biases(k,1,i) + step*d(offset)
+      END DO
     END DO
 
     ! update output weights

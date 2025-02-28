@@ -33,7 +33,7 @@ MODULE opts
     INTEGER :: epoch
     !Variables
     !DOUBLE PRECISION :: beta1, beta2, learning_rate, weight_decay, eps, time
-
+    !print  *, 'line 36 opts.f90'
     IF ((opt_type == 'adam') .or. (opt_type == 'ADAM')) THEN
       !Call adam step
       CALL adam_step(epoch)

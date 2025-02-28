@@ -1,63 +1,130 @@
 MODULE normalize
+    USE atomsProp
     USE fbp, only: find_loc_char, find_loc_int
-    USE nnType, only: natoms_arr, nGs, atom_idx, fpminvs, fpmaxvs, diffs, magnitude, interceptScale,&
-                      elem_mag, elem_intercept
-    USE trainType, only: img_idx, nimages
-    USE atomsProp    
+    USE nnType, only: natoms_arr, nGs, atom_idx, fpminvs, fpmaxvs, diffs, magnitude, interceptScale
 
     IMPLICIT NONE
     PUBLIC
 
     CONTAINS
 
-    SUBROUTINE normalizeFPs(nelement, nAtoms, uniq_elements, MAX_FPS, max_nneighs, &
-                            symbols, nneighbors,neighborlists, fps, dfps)
+    !TODO
+    SUBROUTINE normalizeFPs(nelement, nAtoms, uniq_elements, MAX_FPS, MAX_NNEIGHS, &
+              nneighbors,neighborlists)
+              !nneighbors,neighborlists, fps, dfps)
+        !!!!7 Total Inputs ^ 
         IMPLICIT NONE
         ! Inputs
         INTEGER :: MAX_FPS, max_nneighs, nelement, nAtoms
         INTEGER, DIMENSION(nAtoms) :: nneighbors 
-        INTEGER, DIMENSION(nAtoms) :: symbols
+        !INTEGER, DIMENSION(tnAtoms) :: symbols
         INTEGER, DIMENSION(nelement) :: idx_arr, idx_arr2
-        INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
+        !INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
+        INTEGER, DIMENSION(nAtoms, MAX_NNEIGHS) :: neighborlists
         CHARACTER*3, DIMENSION(nelement) :: uniq_elements
-        DOUBLE PRECISION, DIMENSION(nAtoms, MAX_FPS) :: fps
-        DOUBLE PRECISION, DIMENSION(nAtoms, max_nneighs+1, 3, MAX_FPS) :: dfps
+        !DOUBLE PRECISION, DIMENSION(nAtoms, MAX_FPS) :: fps
+        !DOUBLE PRECISION, DIMENSION(nAtoms, MAX_NNEIGHS, 3, MAX_FPS) :: dfps
 
         ! Variables
         INTEGER :: ptr, ptr2, i, j, j2, m, max_natoms
-        
+        !print *, 'line 30 normalization.f90'
         idx_arr = 1
+        !print *, 'supersumbols: ',supersymbols
+        atom_idx=0
         DO i = 1, nAtoms
-            ptr = symbols(i)
-            !print *, 'fps before normalized of atom ', i
-            !print *, fps(i,1:nGs(ptr))
+            ptr = supersymbols(i)
+            !ptr = symbols(i)
+            !print *, 'ptr: ',ptr
+            atom_idx(idx_arr(ptr),ptr) = i
             fps(i,1:nGs(ptr)) = &
-            fps(i,1:nGs(ptr))*magnitude(1:nGs(ptr),idx_arr(ptr),ptr) + interceptScale(1:nGs(ptr),idx_arr(ptr),ptr)
+            fps(i,1:nGs(ptr))*magnitude(1:nGs(ptr),idx_arr(ptr),ptr) + interceptScale(1:nGs(ptr),idx_arr(ptr),ptr) 
             idx_arr2 = 1
+            !print *, 'about to start j normalization +39'
             DO j = 1, nneighbors(i)+1
+                !print *,'j : ',j
                 IF (j == 1) THEN
-                    !print *, 'dfps from itself before normalized'
                     DO j2 = 1, 3
-                        !print *, 'j2=', j2
-                        !print *, dfps(i,j,j2,1:nGs(ptr))
                         dfps(i,j,j2,1:nGs(ptr)) = dfps(i,j,j2,1:nGs(ptr))*magnitude(1:nGs(ptr),idx_arr(ptr),ptr)
                     END DO
                 ELSE  
+                    !print *, 'full Neighborlist: ',neighborlists(i,:)
+                    m = neighborlists(i,j-1)
+                    !print *,'m: ',m
+                    IF (m <= nAtoms) THEN
+                        ptr2 = supersymbols(m)
+                        DO j2 = 1, 3
+                            dfps(i,j,j2,1:nGs(ptr2)) = &
+                            dfps(i,j,j2,1:nGs(ptr2))*magnitude(1:nGs(ptr2),idx_arr2(ptr2),ptr2)
+                        END DO
+                        idx_arr2(ptr2) = idx_arr2(ptr2) + 1
+                    END IF
+                END IF
+                !print *, 'end of BIG IF statemnt normalization.f90'
+            END DO
+            idx_arr(ptr) = idx_arr(ptr) + 1
+        END DO
+    !print *, 'END OF normalizeFPs normalization.f90'
+    END SUBROUTINE
+
+
+    SUBROUTINE normalizeFPs_ordered(nelement, nAtoms, uniq_elements, maxfps, max_nneighs, &
+               max_natoms_arr,nneighbors,neighborlists, symbols, ordered_fps, dfps)
+        !This module is for training module. Instead of reading fprange from .pyamff file,
+        !this module uses fprange calculated from actual fingerprints
+        IMPLICIT NONE
+        ! Inputs
+        INTEGER :: maxfps, max_nneighs, nelement, nAtoms, max_natoms_arr
+        INTEGER, DIMENSION(nAtoms) :: nneighbors
+        INTEGER, DIMENSION(nAtoms) :: symbols
+        INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
+        CHARACTER*2, DIMENSION(nelement) :: uniq_elements
+        DOUBLE PRECISION, DIMENSION(max_natoms_arr,maxfps,nelement) :: ordered_fps
+        DOUBLE PRECISION, DIMENSION(nAtoms, max_nneighs+1, 3, maxfps) :: dfps
+
+        ! Variables
+        INTEGER :: ptr, ptr2, i, j, j2, m
+        INTEGER, DIMENSION(nelement) :: idx_arr, idx_arr2
+
+        idx_arr = 1
+        !print *, 'line 81 normalization.f90'
+        DO i = 1, nAtoms
+            !print *, 'i: ',i
+            ptr = symbols(i)
+            !print *, 'ptr : ',ptr
+            !print *, 'idx_arr(ptr): ',idx_arr(ptr)
+            !print *, 'magnitude : ',magnitude(1:nGs(ptr),idx_arr(ptr),ptr)
+            !print *, 'interceptScale: ',interceptScale(1:nGs(ptr),idx_arr(ptr),ptr)
+            !print *, 'before normalized fps=', ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)
+            ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr) = &
+            ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)*magnitude(1:nGs(ptr),idx_arr(ptr),ptr) &
+            + interceptScale(1:nGs(ptr),idx_arr(ptr),ptr)
+            !print *, 'ordered_fps=', ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)
+            idx_arr2 = 1
+            !print *, 'starting j loop'
+            DO j = 1, nneighbors(i)+1
+                IF (j == 1) THEN
+                    DO j2 = 1, 3
+                        dfps(i,j,j2,:) = dfps(i,j,j2,1:nGs(ptr))*magnitude(1:nGs(ptr),idx_arr(ptr),ptr)
+                    END DO
+                    !print *, 'finished j =1 if line 100 normalization.f90'
+                ELSE
+                    !print *, 'neighborlist term (j-1): ',neighborlists(i,j-1)
+                    !print *, 'full neighborlist term): ',neighborlists(i,:)
                     m = neighborlists(i,j-1)
                     ptr2 = symbols(m)
-                    !print *, 'dfps from neighbor', m, 'before normalized'
                     DO j2 = 1, 3
-                        !print *, 'j2=', j2
-                        !print *, dfps(i,j,j2,1:nGs(ptr2))
                         dfps(i,j,j2,1:nGs(ptr2)) = dfps(i,j,j2,1:nGs(ptr2))*magnitude(1:nGs(ptr2),idx_arr2(ptr2),ptr2)
                     END DO
+                    !print *, 'line 108 normalization.f90'
                     idx_arr2(ptr2) = idx_arr2(ptr2) + 1
+                    !print *, 'line 110 normalization.f90'
                 END IF
             END DO
             idx_arr(ptr) = idx_arr(ptr) + 1
         END DO
-
+    !print *, 'END OF ORDERED NORMALIZED FPS'
     END SUBROUTINE
+
 
     SUBROUTINE loadnormalizeParas(nAtoms, nelement, MAX_FPS, symbols, uniq_elements)
         IMPLICIT NONE
@@ -150,152 +217,37 @@ MODULE normalize
 
         ! Variables
         INTEGER :: i, j, k
-        
+        !print *,'line 150 normalization.f90'
         DO i = 1, nelement
             DO j = 1, nGs(i)
-                diffs(j,i) = fpmaxvs(j,i) - fpminvs(j,i)
-                IF (diffs(j,i) .LT. 1.0E-8) THEN
-                    fpminvs(j,i) = -1.0d0
+                IF (fpminvs(j,i) .EQ. -1.0d0) THEN
                     diffs(j,i) = 2.d0
-                END IF    
-                IF (fpminvs(j,i) == -1.0d0) THEN
-                    diffs(j,i) = 2.d0
+                ELSE
+                    diffs(j,i) = fpmaxvs(j,i) - fpminvs(j,i)
+                    IF (diffs(j,i) .LT. 1.0E-8) THEN
+                        fpminvs(j,i) = -1.0d0
+                        diffs(j,i) = 2.d0
+                    END IF    
                 END IF   
             END DO
+            !print *, 'line 164 normalization.f90'
+            !print *, 'natoms_arr(i): ',natoms_arr(i)
+            !print *, 'diffs: ',diffs(1:nGs(i),i)
+            !print *, 'magnitude: ',magnitude(1:2,1:natoms_arr(i),i)
             DO k = 1, natoms_arr(i)
                 magnitude(1:nGs(i),k,i) = 2.d0/diffs(1:nGs(i),i)
                 interceptScale(1:nGs(i),k,i) = -2.d0*fpminvs(1:nGs(i),i)/diffs(1:nGs(i),i) - 1.0d0
             END DO
+            !print *, 'magnitude: ',magnitude(1:2,1:natoms_arr(i),i)
         END DO
+        !print *, 'line 170 END OF normalizeParas normalization.f90'
 
     END SUBROUTINE
 
-    SUBROUTINE normalizeParas2(nelement,nAtoms,MAX_FPS,in_natomsarr,max_natoms_arr,symbols,in_atomidx,fps,ordered_fps)
-        !We might need this subroutine at some point but not used currently
-        IMPLICIT NONE
-        ! Inputs
-        INTEGER :: nelement, nAtoms, MAX_FPS, max_natoms_arr
-        DOUBLE PRECISION, DIMENSION(nAtoms, MAX_FPS) :: fps
-        INTEGER, DIMENSION(nAtoms) :: symbols
-        INTEGER, DIMENSION(nelement) :: in_natomsarr
-        INTEGER, DIMENSION(max_natoms_arr,nelement) :: in_atomidx
-        ! Variables
-        INTEGER :: i, j, k, ptr
-        INTEGER, DIMENSION(nelement) :: idx_arr
-        !DOUBLE PRECISION, DIMENSION(MAX_FPS,nelement) :: minv, maxv
-        !outputs
-        DOUBLE PRECISION, DIMENSION(max_natoms_arr,MAX_FPS,nelement) :: ordered_fps
-
-        !print *, 'normalize paras is called'
-        idx_arr = 1
-        DO i = 1, nAtoms
-          !print *, 'i=',i
-          ptr = symbols(i)
-          idx_arr(ptr) = idx_arr(ptr) + 1
-        END DO
-      
-        DO i = 1, nelement
-            !print *, 'in_atomidx=', in_atomidx(:,i)
-            DO j = 1, in_natomsarr(i)
-                ordered_fps(j,1:nGs(i),i) = fps(in_atomidx(j,i),1:nGs(i))
-                !print *, 'ordered_fps of atom', j
-                !print *, ordered_fps(j,1:nGs(i),i)
-            END DO
-        END DO
-
-        !Initialize only once
-        IF (img_idx == 1) THEN
-          fpminvs=0.
-          fpmaxvs=0.
-          !print *, 'min max initialized'
-        END IF
-        DO i = 1, nelement
-            DO j = 1, nGs(i)    
-                IF (fpminvs(j,i) == 0.) THEN
-                    fpminvs(j,i)=MINVAL(ordered_fps(1:in_natomsarr(i),j,i))
-                ELSE IF (fpminvs(j,i) > MINVAL(ordered_fps(1:in_natomsarr(i),j,i))) THEN
-                    fpminvs(j,i)=MINVAL(ordered_fps(1:in_natomsarr(i),j,i))
-                ELSE
-                    !Do nothing
-                    CONTINUE
-                END IF
-                IF (fpmaxvs(j,i) == 0.) THEN
-                    fpmaxvs(j,i)=MAXVAL(ordered_fps(1:in_natomsarr(i),j,i))
-                ELSE IF (fpmaxvs(j,i) < MAXVAL(ordered_fps(1:in_natomsarr(i),j,i))) THEN
-                    fpmaxvs(j,i)=MAXVAL(ordered_fps(1:in_natomsarr(i),j,i))
-                ELSE
-                    !Do nothing
-                    CONTINUE
-                END IF
-            END DO
-            !print *, 'fpminvs=', fpminvs(1:nGs(i),i)
-            !print *, 'fpmaxvs=', fpmaxvs(1:nGs(i),i)
-        END DO
-        !print *, 'min max are calculated'
-
-        DO i = 1, nelement
-            DO j = 1, nGs(i)
-                diffs(j,i)=fpmaxvs(j,i) - fpminvs(j,i)
-                IF (img_idx == nimages) THEN
-                    IF (diffs(j,i) .LT. 1.0E-8) THEN
-                        fpminvs(j,i) = -1.0d0
-                        diffs(j,i) = 2.d0
-                    END IF
-                END IF
-            END DO
-            !print *, 'diffs=', diffs(1:nGs(i),i)
-            elem_mag(1:nGs(i),i) = 2.d0/diffs(1:nGs(i),i)
-            elem_intercept(1:nGs(i),i) = -2.d0*fpminvs(1:nGs(i),i)/diffs(1:nGs(i),i) - 1.0d0
-        END DO
-    END SUBROUTINE
-
-    SUBROUTINE normalizeFPs2(nelement, nAtoms, uniq_elements, maxfps, max_nneighs, &
-               max_natoms_arr,nneighbors,neighborlists, symbols, ordered_fps, dfps)
-        !This module is for training module. Instead of reading fprange from .pyamff file, 
-        !this module uses fprange calculated from actual fingerprints
-        IMPLICIT NONE
-        ! Inputs
-        INTEGER :: maxfps, max_nneighs, nelement, nAtoms, max_natoms_arr
-        INTEGER, DIMENSION(nAtoms) :: nneighbors 
-        INTEGER, DIMENSION(nAtoms) :: symbols
-        INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
-        CHARACTER*2, DIMENSION(nelement) :: uniq_elements
-        DOUBLE PRECISION, DIMENSION(max_natoms_arr,maxfps,nelement) :: ordered_fps
-        DOUBLE PRECISION, DIMENSION(nAtoms, max_nneighs+1, 3, maxfps) :: dfps
-
-        ! Variables
-        INTEGER :: ptr, ptr2, i, j, j2, m
-        INTEGER, DIMENSION(nelement) :: idx_arr, idx_arr2
-        
-        idx_arr = 1
-        DO i = 1, nAtoms
-            ptr = symbols(i)
-            !print *, 'before normalized fps=', ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)
-            ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr) = &
-            ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)*magnitude(1:nGs(ptr),idx_arr(ptr),ptr) &
-            + interceptScale(1:nGs(ptr),idx_arr(ptr),ptr)
-            !print *, 'ordered_fps=', ordered_fps(idx_arr(ptr),1:nGs(ptr),ptr)
-            idx_arr2 = 1
-            DO j = 1, nneighbors(i)+1
-                IF (j == 1) THEN
-                    DO j2 = 1, 3
-                        dfps(i,j,j2,:) = dfps(i,j,j2,1:nGs(ptr))*magnitude(1:nGs(ptr),idx_arr(ptr),ptr)
-                    END DO
-                ELSE  
-                    m = neighborlists(i,j-1)
-                    ptr2 = symbols(m)
-                    DO j2 = 1, 3
-                        dfps(i,j,j2,1:nGs(ptr2)) = dfps(i,j,j2,1:nGs(ptr2))*magnitude(1:nGs(ptr2),idx_arr2(ptr2),ptr2)
-                    END DO
-                    idx_arr2(ptr2) = idx_arr2(ptr2) + 1
-                END IF
-            END DO
-            idx_arr(ptr) = idx_arr(ptr) + 1
-        END DO
-    END SUBROUTINE
-
+    !SUBROUTINE ghost_dfps_correct(nelement, nAtoms, MAX_FPS, max_nneighs, nneighbors, &
+    !neighborlists, sub_nneighbors, sub_nlist, in_dfps, out_dfps)
     SUBROUTINE ghost_dfps_correct(nelement, nAtoms, MAX_FPS, max_nneighs, nneighbors, &
-    neighborlists, sub_nneighbors, sub_nlist, in_dfps, out_dfps)
+    neighborlists, sub_nneighbors, sub_nlist)
         IMPLICIT NONE
         INTEGER :: MAX_FPS, max_nneighs, nelement, nAtoms, len_subnlist
         INTEGER, DIMENSION(nAtoms) :: nneighbors, sub_nneighbors
@@ -309,7 +261,6 @@ MODULE normalize
         sub_nlist=0
         sub_nneighbors=0
         DO i = 1, nAtoms
-          !print *, 'neighborlists of ',i,'=', neighborlists(i,1:nneighbors(i))
           idx=1
           DO j = 1, nneighbors(i)
             IF (idx <= nAtoms) THEN
@@ -324,51 +275,54 @@ MODULE normalize
             END IF
           END DO
         END DO
+        print*, 'orig nlist', neighborlists(1,:)
+        print*, 'sub_nlist', sub_nlist(1,:)
 
         out_dfps=0
 
-        DO i = 1, nAtoms
-            ptr = supersymbols(i)
-            DO j2 = 1, 3
-                DO j = 1, nneighbors(i)+1
-                    m = neighborlists(i,j)
-                    IF (j == 1) THEN
-                        out_dfps(i,j,j2,1:nGs(ptr))=out_dfps(i,j,j2,1:nGs(ptr))+in_dfps(i,j,j2,1:nGs(ptr))
-                    ELSE
-                        m = neighborlists(i,j-1)
-                        IF (m <= nAtoms) THEN
-                            IF (m==i) THEN
-                                m_loc=1
-                            ELSE
-                                m_loc = find_loc_int(sub_nlist(i,:),m,nAtoms)+1
-                            END IF
-                            ptr2 = supersymbols(m)
-                            out_dfps(i,m_loc,j2,1:nGs(ptr2))=out_dfps(i,m_loc,j2,1:nGs(ptr2))+in_dfps(i,j,j2,1:nGs(ptr2))
-                        END IF
-                    END IF
-                END DO
-            END DO
-        END DO
-
-        !DO i=1,nAtoms
-        !  ptr = supersymbols(i)
-        !  DO j2 = 1, 3
-        !    DO j = 1, sub_nneighbors(i)+1
-        !      IF (j == 1) THEN
-        !        print *, 'fp primes at', i, i,j2
-        !        print *, out_dfps(i,j,j2,1:nGs(ptr))
-        !      ELSE
-        !        m=sub_nlist(i,j-1)
-        !        IF (m <= nAtoms) THEN
-        !          m_loc=find_loc_int(sub_nlist(i,:),m,nAtoms)+1
-        !          ptr2=supersymbols(m)
-        !          print *, 'fp primes at', i, m,j2
-        !          print *, out_dfps(i,m_loc,j2,1:nGs(ptr2))
-        !        END IF
-        !      END IF  
+        !DO i = 1, nAtoms
+        !    ptr = supersymbols(i)
+        !    DO j2 = 1, 3
+        !        DO j = 1, nneighbors(i)+1
+        !            IF (j == 1) THEN
+        !                out_dfps(i,j,j2,1:nGs(ptr))=out_dfps(i,j,j2,1:nGs(ptr))+in_dfps(i,j,j2,1:nGs(ptr))
+        !            ELSE
+        !                m = neighborlists(i,j-1)
+        !                IF (m <= nAtoms) THEN
+        !                    IF (m==i) THEN
+        !                        m_loc=1
+        !                    ELSE
+        !                        m_loc = find_loc_int(sub_nlist(i,:),m,nAtoms)+1
+        !                    END IF
+        !                    print*, 'm_loc', m_loc
+        !                    ptr2 = supersymbols(m)
+        !                    out_dfps(i,m_loc,j2,1:nGs(ptr2))=out_dfps(i,m_loc,j2,1:nGs(ptr2))+in_dfps(i,j,j2,1:nGs(ptr2))
+        !                END IF
+        !            END IF    
+        !        END DO        
         !    END DO
-        !  END DO
         !END DO
+
+!        DO i=1,nAtoms
+!          ptr = supersymbols(i)
+!          DO j2 = 1, 3
+!            DO j = 1, sub_nneighbors(i)+1
+!              IF (j == 1) THEN
+!                print *, 'fp primes at', i, i,j2
+!                print *, out_dfps(i,j,j2,1:nGs(ptr))
+!              ELSE
+!                m=sub_nlist(i,j-1)
+!                IF (m <= nAtoms) THEN
+!                  m_loc=find_loc_int(sub_nlist(i,:),m,nAtoms)+1
+!                  ptr2=supersymbols(m)
+!                  print *, 'fp primes at', i, m,j2
+!                  print *, out_dfps(i,m_loc,j2,1:nGs(ptr2))
+!                END IF
+!              END IF  
+!            END DO
+!          END DO
+!        END DO
+
     END SUBROUTINE
 
 END MODULE

@@ -2,8 +2,8 @@ MODULE pyamffType
 
     IMPLICIT NONE
     TYPE :: ImgInfo
-        INTEGER :: natoms
-        INTEGER, DIMENSION(:), ALLOCATABLE :: nneighbors, symbols, natoms_arr
+        INTEGER :: natoms,tnAtoms !tnAtoms = local nAtoms + ghost atoms for the img
+        INTEGER, DIMENSION(:), ALLOCATABLE :: nneighbors, symbols, natoms_arr,supersymbols
         INTEGER, DIMENSION(:,:), ALLOCATABLE :: neighborlists, atom_idx
         DOUBLE PRECISION :: predE, targetE
         DOUBLE PRECISION, DIMENSION(:,:), ALLOCATABLE :: poscar, cell

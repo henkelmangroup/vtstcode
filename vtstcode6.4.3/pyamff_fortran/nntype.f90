@@ -11,20 +11,22 @@ MODULE nnType
     INTEGER, DIMENSION(:,:), ALLOCATABLE :: atom_idx
     DOUBLE PRECISION, DIMENSION(:,:), ALLOCATABLE :: fpminvs, fpmaxvs, diffs
     DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: magnitude, interceptScale 
-    DOUBLE PRECISION, DIMENSION(:,:), ALLOCATABLE :: elem_mag, elem_intercept
+    !DOUBLE PRECISION, DIMENSION(:,:), ALLOCATABLE :: elem_mag, elem_intercept
     ! NN structure (dim = nhiddenlayers)
     INTEGER, DIMENSION(:), ALLOCATABLE :: nhidneurons
     ! NN paras
     INTEGER :: nhidlayers
     CHARACTER*8 :: actfuncId
-    CHARACTER*32 :: scaler_type
+    CHARACTER*16 :: scaler_type
+    DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: biases
+    DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: weights
 
     DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: in_weights
-    DOUBLE PRECISION, DIMENSION(:,:), ALLOCATABLE :: in_biases
+    DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: in_biases
     DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: out_weights
-    DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: out_biases
+    DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: out_biases
     DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: hid_weights
-    DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: hid_biases
+    DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: hid_biases
 
     DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: in_gradients
     DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: out_gradients

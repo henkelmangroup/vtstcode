@@ -11,7 +11,9 @@ MODULE trainType
     INTEGER, DIMENSION(:,:,:), ALLOCATABLE :: neighborlists_img
     DOUBLE PRECISION :: floss_const
     DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: input_fps !calculated fps of all images 
+    !!!!!!!!!!!!DOUBLE PRECISION, DIMENSION(:,:,:), ALLOCATABLE :: input_fps !calculated fps of all images 
     DOUBLE PRECISION, DIMENSION(:,:,:,:,:), ALLOCATABLE :: input_dfps !calculated dfps of all images 
+    !!!DOUBLE PRECISION, DIMENSION(:,:,:,:), ALLOCATABLE :: input_dfps !calculated dfps of all images 
     DOUBLE PRECISION, DIMENSION(:,:,:,:,:), ALLOCATABLE :: all_neurons !all neuron values of all images
     DOUBLE PRECISION, DIMENSION(:,:,:,:,:), ALLOCATABLE :: in_gradients_img !in_gradients of all images
     DOUBLE PRECISION, DIMENSION(:,:,:,:,:,:), ALLOCATABLE :: hid_gradients_img !hid_gradients of all images

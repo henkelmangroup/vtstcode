@@ -14,7 +14,6 @@ MODULE adam
     ALLOCATE(bias_v(MAXVAL(nhidneurons),nhidlayers+1,nelements))
     ALLOCATE(weight_m(max(MAXVAL(nGs),MAXVAL(nhidneurons)),MAXVAL(nhidneurons),nhidlayers+1,nelements))
     ALLOCATE(weight_v(max(MAXVAL(nGs),MAXVAL(nhidneurons)),MAXVAL(nhidneurons),nhidlayers+1,nelements))
-    
     ! Zeros arrays
     bias_v=0.
     bias_m=0.
@@ -23,7 +22,6 @@ MODULE adam
   END SUBROUTINE
 
   SUBROUTINE adam_step(time,b1,b2,lr1,wd,eps1)
-    !Reference: https://pytorch.org/docs/stable/generated/torch.optim.Adam.html#torch.optim.Adam
     IMPLICIT NONE
     !Input
     INTEGER, INTENT(IN) :: time
@@ -49,7 +47,6 @@ MODULE adam
       lr=lr1
     ELSE
        lr=0.01d0
-       !lr=0.02d0
     END IF
     IF (PRESENT(wd)) THEN
       weight_decay=wd
@@ -89,15 +86,11 @@ MODULE adam
       (sqrt(weight_v(1:nGs(i),1:nhidneurons(1),1,i)/bias_corr2)+eps)
       !print *, 'updated input weights'
       !print *, in_weights(1:nGs(i),1:nhidneurons(1),i)
-      !DO k=1, natoms_arr(i)
-      !  in_biases(k,1:nhidneurons(1),i)=&
-      !  in_biases(k,1:nhidneurons(1),i)&
-      !  -lr*bias_m(1:nhidneurons(1),1,i)/(sqrt(bias_v(1:nhidneurons(1),1,i)/bias_corr2)+eps)
-      !END DO
-      in_biases(1:nhidneurons(1),i)=&
-      in_biases(1:nhidneurons(1),i)&
+      DO k=1, natoms_arr(i)
+        in_biases(k,1:nhidneurons(1),i)=&
+        in_biases(k,1:nhidneurons(1),i)&
       -lr*bias_m(1:nhidneurons(1),1,i)/(sqrt(bias_v(1:nhidneurons(1),1,i)/bias_corr2)+eps)
-   
+      END DO
       !print *, 'updated input biases'
       !print *, in_biases(1,1:nhidneurons(1),i)
       DO l=1, nhidlayers-1
@@ -121,14 +114,11 @@ MODULE adam
         (sqrt(weight_v(1:nhidneurons(l),1:nhidneurons(l+1),l+1,i)/bias_corr2)+eps)
         !print *, l,'th hiddenlayer weights'
         !print *, hid_weights(1:nhidneurons(l),1:nhidneurons(l+1),l,i)
-        !DO k=1, natoms_arr(i)
-        !  hid_biases(k,1:nhidneurons(l+1),l,i)=&
-        !  hid_biases(k,1:nhidneurons(l+1),l,i)&
-        !  -lr*bias_m(1:nhidneurons(l+1),l+1,i)/(sqrt(bias_v(1:nhidneurons(l+1),l+1,i)/bias_corr2)+eps)
-        !END DO
-        hid_biases(1:nhidneurons(l+1),l,i)=&
-        hid_biases(1:nhidneurons(l+1),l,i)&
+        DO k=1, natoms_arr(i)
+          hid_biases(k,1:nhidneurons(l+1),l,i)=&
+          hid_biases(k,1:nhidneurons(l+1),l,i)&
         -lr*bias_m(1:nhidneurons(l+1),l+1,i)/(sqrt(bias_v(1:nhidneurons(l+1),l+1,i)/bias_corr2)+eps)
+        END DO
         !print *, l,'th hiddenlayer biases'
         !print *, hid_biases(1,1:nhidneurons(l+1),l,i)
       END DO
@@ -146,19 +136,17 @@ MODULE adam
       bias_v(1,nhidlayers+1,i)=&
       beta2*bias_v(1,nhidlayers+1,i)+(1-beta2)*(bias_grad(1,nhidlayers+1,i)**2)
       
-      ! Update output layerr's weights and biases
+      ! Update output layer's weights and biases
       out_weights(1:nhidneurons(nhidlayers),1,i)=&
       out_weights(1:nhidneurons(nhidlayers),1,i)&
       -lr*weight_m(1:nhidneurons(nhidlayers),1,nhidlayers+1,i)/&
       (sqrt(weight_v(1:nhidneurons(nhidlayers),1,nhidlayers+1,i)/bias_corr2)+eps)
       !print *, 'output layer weight'
       !print *, out_weights(1:nhidneurons(nhidlayers),1,i)
-      !DO k=1, natoms_arr(i)
-      !  out_biases(k,1,i)=out_biases(k,1,i)&
-      !  -lr*bias_m(1,nhidlayers+1,i)/(sqrt(bias_v(1,nhidlayers+1,i)/bias_corr2)+eps)
-      !END DO
-      out_biases(i)=out_biases(i)&
+      DO k=1, natoms_arr(i)
+        out_biases(k,1,i)=out_biases(k,1,i)&
       -lr*bias_m(1,nhidlayers+1,i)/(sqrt(bias_v(1,nhidlayers+1,i)/bias_corr2)+eps)
+      END DO
       !print *, 'output layer biases'
       !print *, out_biases(1,1,i)
     END DO  

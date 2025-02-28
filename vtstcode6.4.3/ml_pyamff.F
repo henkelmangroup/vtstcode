@@ -64,14 +64,16 @@
 
       INTEGER :: i, in_maxnimg, seedval
       CHARACTER*20 :: filename
- 
+      !print *, 'line 67 ml_pyamff.F'
       nions=T_INFO%nions
       nelement=T_INFO%ntyp
       iu0=IO%IU0
       iu6=IO%IU6
+      !print *, 'line 72 ml_pyamff.F'
       !mdout=IO%MDOUT ! for debug, eventually it will be gone
       !pesout=IO%PESOUT ! for debug, eventually it will be gone
       initImg=.TRUE.
+      !print *, 'line 76 ml_pyamff.F'
 
       IF (images == 0) THEN 
         images_local=1
@@ -79,6 +81,7 @@
         images_local=images
       END IF  
       totnimg=images_local
+      !print *, 'line 84 ml_pyamff.F'
 
       !Allocate common variables
       ALLOCATE(NAts(images_local))
@@ -86,7 +89,8 @@
       ALLOCATE(nat_arr(nelement,images_local))
       dt=0.1_q
       maxmove=0.01_q
-     
+      !print *, 'line 92 ml_pyamff.F'
+
       !Allocate posions, latts, boxes, energy, force, Frees
       ALLOCATE(posion_all(3,nions,images_local))
       ALLOCATE(latt_a_all(3,3,images_local))
@@ -95,7 +99,8 @@
       ALLOCATE(toten_all(images_local))
       ALLOCATE(force_all(3,nions,images_local))
       ALLOCATE(Free_all(3,nions,images_local)) 
- 
+      !print *, 'line 102 ml_pyamff.F'
+
       ! Check cell_flag in NEB
       cell_flag=.FALSE.
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'LNEBCELL','=','#',';','L', &
@@ -104,7 +109,8 @@
         IF (IU0>=0) WRITE(IU0,*)'Error reading item ''LNEBCELL'' from file INCAR.'
         STOP
       ENDIF
-        
+      !print *, 'line 112 ml_pyamff.F'
+
       !Check global flag 
       global=.TRUE.
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'LGLOBAL','=','#',';','L', &
@@ -113,6 +119,7 @@
         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''LGLOBAL'' from file INCAR.'
         STOP
       ENDIF
+      !print *, 'line 122 ml_pyamff.F'
 
       !read variables used for the ML optimzier
       !Note: RDATAB subroutine is in /lib/drdatab.F
@@ -125,7 +132,8 @@
           IF (iu0>=0) WRITE(iu0,*)'Error reading item ''PYAMFF_CONV'' from file INCAR.'
           STOP
       ENDIF
-      
+      !print *, 'line 135 ml_pyamff.F'
+
       IF (conv_method == 'RMSE') THEN  
           energy_tol=0.001_q
           CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_ETOL','=','#',';','F', &
@@ -134,6 +142,7 @@
               IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_ETOL'' from file INCAR.'
               STOP
           ENDIF
+      !print *, 'line 145 ml_pyamff.F'
              
           force_tol=0.010_q
           CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FTOL','=','#',';','F', &
@@ -142,6 +151,8 @@
              IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FTOL'' from file INCAR.'
              STOP
           ENDIF
+      !print *, 'line 154 ml_pyamff.F'
+
       ELSE IF (conv_method == 'GRADNORM') THEN 
           ! This is for gradnorm as a model convergence criteria.
           gradtol=0.001_q
@@ -155,6 +166,7 @@
           IF (iu0>=0) WRITE(iu0,*) 'Value Error of ''PYAMFF_CONV'' from file INCAR.'
           IF (iu0>=0) WRITE(iu0,*) 'Available values: ''GRADNORM, RMSE'
       END IF
+      !print *, 'line 169 ml_pyamff.F'
 
       force_coeff=1.00_q
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_FCOEFF','=','#',';','F', &
@@ -163,6 +175,7 @@
          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_FCOEFF'' from file INCAR.'
          STOP
       ENDIF
+      !print *, 'line 178 ml_pyamff.F'
 
       maxEpochs=2000
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_MAXEPOCH','=','#',';','I', &
@@ -172,6 +185,8 @@
          STOP
       ENDIF
 
+      !print *, 'line 188 ml_pyamff.F'
+
       filename='mlff.pyamff'
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_MODEL','=','#',';','S', &
       &            IDUM,RDUM,CDUM,LDUM,filename,N,LEN(filename),IERR)
@@ -179,6 +194,7 @@
           IF (iu0>=0) WRITE(iu0,*)'Error reading item ''PYAMFF_MODEL'' from file INCAR.'
           STOP
       ENDIF
+      !print *, 'line 197 ml_pyamff.F'
 
       optType='RPROP'
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_OPT','=','#',';','S', &
@@ -187,6 +203,7 @@
         IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_OPT'' from file INCAR.'
         STOP
       ENDIF
+      !print *, 'line 206 ml_pyamff.F'
 
       seedval=4357
       CALL RDATAB(.TRUE.,'INCAR',IO%IU5,'PYAMFF_SEED','=','#',';','I', &
@@ -195,6 +212,7 @@
          IF (iu0>=0) WRITE(iu0,*) 'Error reading item ''PYAMFF_SEED'' from file INCAR.'
          STOP
       ENDIF
+      !print *, 'line 215 ml_pyamff.F'
 
       !Assign number of atoms to the array type
       NAts(1:images_local)=nions
@@ -203,7 +221,7 @@
         uniqEls(i)=T_INFO%type(i)
         nat_arr(i,1:images_local)=T_INFO%nityp(i)
       END DO
-      
+      !print *,'line 224 ml_pyamff.F'
       !Initiate pyamff in pyamff source code (/path-to-pyamff/pyamff/fortran/model.f90) 
       !All of the required variables will be allocated in pyamff side
       !TEMP: set maxnimg (memory issue on frontera)
@@ -211,6 +229,7 @@
       CALL PyAMFF_init(NAts(1:images_local), nelement, images_local, & 
       uniqEls(1:nelement), nat_arr(1:nelement,1:images_local),in_maxnimg,filename,seedval)
       !print *, 'pyamff_init is done in vasp side'
+      !print *, 'line 232 ml_pyamff.F'
 
     END SUBROUTINE    
    
@@ -231,6 +250,7 @@
       DOUBLE PRECISION, DIMENSION(3,nions,1) :: posions, trueFs, Frees
       ! Calc_pes
       REAL(q) :: pes_posion(3,nions)
+      !print *, 'line 253 ml_pyamff.F'
 
       !Set flags whether it is initial images or not and update total number of images 
       IF (Initimg .EQV. .TRUE.) THEN
@@ -252,7 +272,7 @@
         newImg=.TRUE.
         totnimg=totnimg+images_local
       END IF
-
+      !print *, 'line 275 ml_pyamff.F'
       !Prepare inputs of PyAMFF_step
       !Convert the position into Cartesian coordinates
       CALL dirkar(nions, posion, latt_a)
@@ -278,7 +298,7 @@
         boxes_all(4:6,node)=latt_a(1:3,2)
         boxes_all(7:9,node)=latt_a(1:3,3)
         CALLMPI_C( M_SUM_d( comm_chain, boxes_all(1,1), 9*images))
-
+        !print *, 'line 301 ml_pyamff.F'
         toten_all=0._q
         toten_all(node)=toten
         CALLMPI_C( M_SUM_d (comm_chain,toten_all(1),images))
@@ -311,12 +331,16 @@
      
       ! TODO: Pass conv_method  
       !Perform PyAMFF training
+      !!! 19 or 21 for PyAMFF step arguments
+      !print *, 'line 334 ml_pyamff.F'
       IF (newImg) THEN
+        !print *, 'line 336 ml_pyamff.F'
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
            eflag,fflag,Free_all,conv_method,energy_tol,force_tol,gradtol,&
            NAts,nat_arr)
       ELSE
+        !print *, 'line 342 ml_pyamff.F'
         CALL PyAMFF_step(posion_all,toten_all,force_all,boxes_all,nelement,&
           images_local,totnimg,maxEpochs,MAXVAL(nat_arr),optType,force_coeff,newImg,&
            eflag,fflag,Free_all,conv_method,energy_tol,force_tol,gradtol)
@@ -333,7 +357,7 @@
         
       !Convert posion back to direct
       CALL kardir(nions,posion,latt_b)
-
+      !print *, 'END OF SUBROUTINE ML_PyAMFF_train line 359 ml_pyamff.F'
     END SUBROUTINE 
  
     SUBROUTINE ML_PyAMFF_step(optflag,posion,toten,force,hstress,latt_a,latt_b,Free)
@@ -347,7 +371,7 @@
       ! Take qm-step on ML-PES
       CALL qm_step(optflag,posion,toten,force,hstress,latt_a,latt_b)
       !CALL fire_step(optflag,posion,toten,force,hstress,latt_a,latt_b)
-  
+      !print *, 'END OF ML_PyAMFF_step line 373 ml_pyamff.F'
     END SUBROUTINE
    
     SUBROUTINE ML_PyAMFF_cleanup
@@ -379,6 +403,18 @@
       !Convert the position into Cartesian coordinates
       CALL dirkar(nions, posion, latt_a)
       !Run calculator to get energy and force of the posion
+      !CALL PyAMFF_calc(nions,posion,boxes(1:9,1),nat_arr(:,1),MAXVAL(nat_arr),&
+      !nelement,uniqEls,predE,predF)
+      !print *, 'nGs: ',nGs
+      !print *, 'nions line 408 ml_pyamff.F',nions
+      !print *, 'posion',posion
+      !print *, 'boxes',boxes
+      !print *, 'nat_arr: ',nat_arr
+      !print *, 'MAXVAL(nat_arr): ',MAXVAL(nat_arr)
+      !print *, 'nelement: ',nelement
+      !print *, 'uniqE1s: ',uniqEls
+      !print *, 'predE: ',predE
+      !print *, 'predF', predF
       CALL PyAMFF_calc(nions,posion,boxes(1:9,1),nat_arr(:,1),MAXVAL(nat_arr),&
       nelement,uniqEls,predE,predF)
       ! For frozen atoms

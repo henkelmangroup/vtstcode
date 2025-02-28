@@ -22,6 +22,7 @@ MODULE lossgrad
     ALLOCATE(inputF(3,nAtimg))
     ALLOCATE(targetF(3,nAtimg))
     !Find the maximum natoms per element, total natoms over all images
+    !print *, 'line 25 lossgrad.f90'
     max_natarr=0
     max_tnat=0
     DO img=1, nimages
@@ -44,6 +45,7 @@ MODULE lossgrad
     ALLOCATE(out_gradients_img(max_natarr,nhidneurons(nhidlayers),1,nelements,nimages))
      
     ! Initialize arrays with zero
+    !print *, 'line 48 lossgrad.f90'
     curr_epoch=0
     layer_backgrad=0
     bias_grad=0
@@ -65,6 +67,7 @@ MODULE lossgrad
     inputF=0.
     targetF=0.
 
+    !print *, 'line 70 END OF init_backward  lossgrad.f90'
   END SUBROUTINE
 
   SUBROUTINE backward(fconst)
@@ -80,18 +83,23 @@ MODULE lossgrad
     weight_grad_e=0
     bias_grad_f=0
     weight_grad_f=0
-
+    !print *, 'line 86 lossgrad.f90'
     DO i=1, nelements
       DO img=1, nimages
-        !print *, 'img=',img
+        !print *, 'line 89 lossgrad.f90 img=',img
         IF (nhidlayers==1) THEN
           ! No hidweights
           GOTO 10
         ELSE
+          !print *, 'line 94 lossgrad.f90'
+          !print *, 'nhidneurons(1): ',nhidneurons(1)
+          !print *, 'nhidneurons(2): ',nhidneurons(2)
+          !print *, 'line 97 lossgrad.f90 hid_weights(1:nhidneurons(1),1:nhidneurons(2),1,i): ',hid_weights(1:nhidneurons(1),1:nhidneurons(2),1,i)
           layer_backgrad(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(1),1:nhidneurons(2),1,i,img) = &
           layer_backgrad(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(1),1:nhidneurons(2),1,i,img)+ &
           backwardgrad(all_neurons(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(1),1,i,img),&
           hid_weights(1:nhidneurons(1),1:nhidneurons(2),1,i),TrainImg(img)%natoms_arr(i),nhidneurons(2),nhidneurons(1))
+          !print *, 'line 99 lossgrad.f90'
           IF (nhidlayers==2) THEN
             ! Only one hidweight
             GOTO 10
@@ -106,13 +114,14 @@ MODULE lossgrad
           END IF
         END IF
  10     CONTINUE
+        !print *, 'line 114 lossgrad.f90'
         layer_backgrad(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(nhidlayers),:1,nhidlayers,i,img)=&
         layer_backgrad(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(nhidlayers),:1,nhidlayers,i,img)+&
         backwardgrad(all_neurons(1:TrainImg(img)%natoms_arr(i),1:nhidneurons(nhidlayers),nhidlayers,i,img),&
         out_weights(1:nhidneurons(nhidlayers),:1,i),TrainImg(img)%natoms_arr(i),1,nhidneurons(nhidlayers))
       END DO
     END DO
-
+    !print *, 'line  118 lossgrad.f90'
     DO img=1,nimages
       IF (energy_training) THEN
         CALL eloss_grad(img,MAXVAL(TrainImg(img)%natoms_arr))
@@ -151,7 +160,7 @@ MODULE lossgrad
 !        end if
 !      END DO
 !    END DO
-
+  !print *, 'END OF SUBROUTINE BACKWARD line 160 lossgrad.f90'
   END SUBROUTINE
 
   SUBROUTINE eloss_grad(img,maxnat)
@@ -600,7 +609,8 @@ MODULE lossgrad
     DOUBLE PRECISION, DIMENSION(k, j) :: weight
     DOUBLE PRECISION, DIMENSION(i,k,j) :: backgrad
     INTEGER :: a, b, i, j, k
-
+    ! print*, 'line 610 lossgrad.f90'
+    ! print*, 'actfuncID: ',actfuncID
     IF (actfuncId == 'sigmoid') THEN
       DO a = 1, i
         diagonal = 0.0d0
@@ -615,7 +625,11 @@ MODULE lossgrad
         DO b = 1, k
           diagonal(b,b) = 1.0d0-actval(a,b)**2
         END DO
+        ! print*, 'line  626 lossgrad.f90'
+        ! print*,'diagonal: ',diagonal
+        ! print*,'weight: ',weight
         backgrad(a,1:k,1:j) = MATMUL(diagonal,weight)
+        ! print*, 'line 628 lossgrad.f90'
       END DO
     ELSE IF (actfuncId == 'relu') THEN
       DO a = 1, i
@@ -630,7 +644,7 @@ MODULE lossgrad
         backgrad(a,1:k,1:j) = MATMUL(diagonal,weight)
       END DO
     END IF
-  
+  ! print*, 'line 641 lossgrad.f90 END of SUBROUTINE backwardgrad'
   END FUNCTION
 
   SUBROUTINE LossFunction(force_coeff,energyloss, forceloss,loss)
@@ -695,7 +709,7 @@ MODULE lossgrad
           outarray(a,b,b) = 1.0d0-actval(a,b)**2 
         END DO
       ELSE
-        PRINT *, 'Unknown function: ', actfuncId, 'for force training'
+        ! print*, 'Unknown function: ', actfuncId, 'for force training'
         STOP
       END IF
     END DO
@@ -723,7 +737,7 @@ MODULE lossgrad
           outarray(a,b,b) = -2.d0*actval(a,b)*(1.0d0-actval(a,b)**2)
         END DO  
       ELSE
-        PRINT *, 'Unknown function: ', actfuncId, 'for force training' 
+        ! print*, 'Unknown function: ', actfuncId, 'for force training' 
         STOP
       END IF
     END DO
@@ -810,7 +824,7 @@ MODULE lossgrad
 
   SUBROUTINE backcleanup
     IMPLICIT NONE
-
+    ! print*, 'HERE in backcleanup line 827 lossgrad.f90'
     DEALLOCATE(input_fps)
     DEALLOCATE(input_dfps)
     DEALLOCATE(all_neurons)

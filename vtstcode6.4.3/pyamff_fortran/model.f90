@@ -33,7 +33,7 @@ MODULE PyAMFF
       INTEGER :: i, j, img, max_natarr, ptr, ptr2
       INTEGER, DIMENSION(nelement) :: idx_arr
       CHARACTER*3, DIMENSION(92) :: elementArray
-       
+      !print*, 'line 36 model.f90'       
       DATA elementArray / "H","He","Li","Be","B","C","N","O", &
                  "F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc", &
                  "Ti","V","Cr","Mn","Fe","Co","Ni","Cu","Zn","Ga","Ge","As","Se", &
@@ -48,6 +48,7 @@ MODULE PyAMFF
       ELSE
         maxNimg=nimg !Default of maximum number of images = number of initial input images
       END IF
+      !print*, 'line 51 model.f90'       
 
       !Allocate arrays 
       ALLOCATE(TrainImg(maxNimg)) !use max_nimg for addition of images later
@@ -63,6 +64,7 @@ MODULE PyAMFF
         ALLOCATE(TrainImg(img)%predF(3,NAts(img)))
         ALLOCATE(TrainImg(img)%Free(3,NAts(img)))
       END DO
+      !print*, 'line 67 model.f90'       
 
       !Set unique elemnt array
       DO j=1, nelement
@@ -71,11 +73,12 @@ MODULE PyAMFF
         ELSE IF (PRESENT(in_uniqElems)) THEN
           uniqElems(j)=in_uniqElems(j)
         ELSE
-          PRINT *, 'Information on unique elements is missing. Job is killed by PyAMFF_init'
+          !print*, 'Information on unique elements is missing. Job is killed by PyAMFF_init'
           STOP
         END IF
       END DO
-      
+      !print*, 'line 80 model.f90'       
+
       !Set atomic information of initial images
       DO img=1, nimg
         TrainImg(img)%natoms=NAts(img)
@@ -97,10 +100,11 @@ MODULE PyAMFF
           END DO 
           !print *, 'symbols=', TrainImg(img)%symbols 
         ELSE 
-          PRINT *, 'Information on atomic numbers is missing. Job is killed by PyAMFF_init'
+          !print*, 'Information on atomic numbers is missing. Job is killed by PyAMFF_init'
           STOP
         END IF
-        
+        !print*, 'line 106 model.f90'       
+
         !Allocate and set atom_idx 
         ALLOCATE(TrainImg(img)%atom_idx(maxval(TrainImg(img)%natoms_arr),nelement))
         idx_arr=1
@@ -111,6 +115,8 @@ MODULE PyAMFF
         END DO
       END DO
      
+      !print*, 'line 118 model.f90'       
+
       !Store values in main memory
       !total number of elements
       nelements=nelement
@@ -119,16 +125,23 @@ MODULE PyAMFF
       !total natoms of all initial images
       nAtimg=SUM(nAts(1:nimg)) 
       
+      !print*, 'line 128 model.f90'       
+
       !TODO:
       !This should be called maybe in step but only once. 
       !It depends on if we pass the INCAR info in init or step
       !Initiate training (reading mlff, allocate arrays related to backward prop)
       IF (PRESENT(filename)) THEN
-        CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems,filename,seedval)
+        !print*, 'line 135 model.f90 - detected file'
+        !CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems,filename,seedval)
+        CALL train_init(MAXVAL(nAts),nelement, uniqElems,filename,seedval)
       ELSE  
-        CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems)
+        !print*, 'else line 139 model.f90 - did not detect file'
+        !CALL train_init(MAXVAL(nAts),nelement, max_fps,uniqElems)
+        CALL train_init(MAXVAL(nAts),nelement,uniqElems)
       END IF
       !print *, 'train_init is done in pyamff'
+      !print*, 'line 142 model.f90'       
 
       !Allocate input_fps and input_dfps of TrainImg 
       DO img=1, nimg
@@ -136,13 +149,16 @@ MODULE PyAMFF
         ALLOCATE(TrainImg(img)%input_fps(max_natarr,MAXVAL(nGs),nelement))
         ALLOCATE(TrainImg(img)%input_dfps(NAts(img),NAts(img),3,MAXVAL(nGs)))
       END DO
+      !print*, 'line 150 model.f90'       
+
       !Allocate elementwise magnitude and intercept scale
-      ALLOCATE(elem_mag(MAXVAL(nGs),nelement))
-      ALLOCATE(elem_intercept(MAXVAL(nGs),nelement))
-      elem_mag=0.d0
-      elem_intercept=0.d0
+      !ALLOCATE(elem_mag(MAXVAL(nGs),nelement))
+      !ALLOCATE(elem_intercept(MAXVAL(nGs),nelement))
+      !elem_mag=0.d0
+      !elem_intercept=0.d0
 
       !print *, 'pyamff_init is done in pyamff '
+       !print*, 'END OF PYAMFF_INT line 159 model.f90'       
 
     END SUBROUTINE
 
@@ -178,7 +194,7 @@ MODULE PyAMFF
       !Variables
       INTEGER :: img, update_idx, i, img_ptr
     
-
+      !print*, 'line 197 model.f90'
       !flags for training !need better way
       energy_training=eflag
       force_training=fflag
@@ -197,15 +213,17 @@ MODULE PyAMFF
       !print *, 'total nimages=', totnimg
       !TODO: we should be able to add multiple new images to the training set
       img_ptr=1
+      !print*, 'line 216 model.f90'
       DO img=update_idx, totnimg
         IF (newImg .EQV. .TRUE.) THEN
           !Allocate TrainImage key arrays for a new image (similar to pyamff_init but for only new images)
           IF (PRESENT(in_natarr)) THEN !VTST-ML inputs
+            !print*, 'line 221 model.f90'
             CALL UpdateTrainImage(img, new_nat(img_ptr), nelement, in_natarr(:,img_ptr))
             !print *, 'new image training image is updated'
             !print *, 'nimages =', nimages
           ELSE 
-            PRINT *, 'new image atomic information is missing. Job is killed by pyamff_step'
+            !print*, 'new image atomic information is missing. Job is killed by pyamff_step'
             STOP
           END IF
           
@@ -264,6 +282,7 @@ MODULE PyAMFF
       !update_idx will be used as an initial pointer of neighborlists, fingerprints calculation
       !forward should be redone with the updated parameters
       !backward only occurs when img=nimg
+      !print*, 'line 285 model.f90'
       DO img=1, totnimg
         img_idx=img
         CALL trainExec(TrainImg(img)%natoms,TrainImg(img)%poscar,&
@@ -273,7 +292,7 @@ MODULE PyAMFF
         max_epoch,force_coeff,conv_method,energy_tol,force_tol,grad_tol,&
         newImg,update_idx)
       END DO
-
+    !print*, 'line 295 model.f90 END of Pyamff_Step'
     END SUBROUTINE
 
     SUBROUTINE UpdateTrainImage(img, NAt, nelement, in_natarr)
@@ -285,7 +304,7 @@ MODULE PyAMFF
       INTEGER, INTENT(IN) :: img, NAt, nelement
       INTEGER, DIMENSION(nelement), INTENT(IN) :: in_natarr
       !Variables
-      INTEGER, PARAMETER :: max_fps=500
+      !INTEGER, PARAMETER :: max_fps=500
       INTEGER, PARAMETER :: max_neighs=100 
       INTEGER :: curr_len, i, j, max_natarr, ptr, ptr2
       INTEGER, DIMENSION(nelement) :: idx_arr
@@ -357,7 +376,7 @@ MODULE PyAMFF
       max_natarr=MAXVAL(TrainImg(img)%natoms_arr)
       ALLOCATE(TrainImg(img)%input_fps(max_natarr,MAXVAL(nGs),nelement))
       ALLOCATE(TrainImg(img)%input_dfps(NAt,NAt,3,MAXVAL(nGs)))
-      
+      !print *, 'line 379 end of SUBROUTINE UpdateTrainImage model.f90'
     END SUBROUTINE
 
     SUBROUTINE Reallocate_TrainImg(curr_nimg)
@@ -431,6 +450,7 @@ MODULE PyAMFF
     ! Calculate energy and forces on the input model                       !
     !----------------------------------------------------------------------!
       use fpCalc
+      !use nntype !!!
       IMPLICIT NONE
       !Inputs
       INTEGER :: nAtoms, nelement,max_natarr
@@ -452,13 +472,13 @@ MODULE PyAMFF
       DOUBLE PRECISION, DIMENSION(nAtoms,3) :: pos_car
       DOUBLE PRECISION, DIMENSION(3,3) :: cell
       !Note nGs should be known to use this subroutine
-      DOUBLE PRECISION, DIMENSION(nAtoms, MAXVAL(nGs)) :: fps
+      !DOUBLE PRECISION, DIMENSION(nAtoms, MAXVAL(nGs)) :: fps
       DOUBLE PRECISION, DIMENSION(max_natarr, MAXVAL(nGs), nelement) :: ordered_fps
-      DOUBLE PRECISION, DIMENSION(nAtoms, max_neighs, 3, MAXVAL(nGs)) :: temp_dfps
-      DOUBLE PRECISION, DIMENSION(nAtoms, nAtoms, 3, MAXVAL(nGs)) :: dfps
+      !DOUBLE PRECISION, DIMENSION(nAtoms, max_neighs, 3, MAXVAL(nGs)) :: temp_dfps
+      !DOUBLE PRECISION, DIMENSION(nAtoms, nAtoms, 3, MAXVAL(nGs)) :: dfps
 
       !print *, 'vasp calculator is called'
-     
+      !print*, 'line 481 model.f90'
       ptr2=0
       DO i=1, nelement
         symbols(ptr2+1:ptr2+in_natarr(i))=i
@@ -482,21 +502,35 @@ MODULE PyAMFF
       energy_training=.FALSE.
       force_training=.FALSE.
       
-      fps=0.
-      dfps=0.
-      temp_dfps=0.
+      !fps=0.
+      !dfps=0.
+      !temp_dfps=0.
 
-      CALL calcfps(nAtoms, pos_car, cell, symbols, MAXVAL(nGs), nelement, forceEngine, &
-                   fps, temp_dfps, neighs, num_neigh)
+      !CALL calcfps(nAtoms, pos_car, cell, symbols, MAXVAL(nGs), nelement, forceEngine, &
+      !             fps, temp_dfps, neighs, num_neigh)
+      !CALL calcfps(nAtoms, pos_car, cell, symbols, MAXVAL(nGs), nelement, forceEngine, &
+      !             neighs, num_neigh)
+      !print*, 'line 513 PyAMFF_Calc in model.f90'
+      CALL calcfps(nAtoms, pos_car, cell, symbols, nelement, forceEngine, &
+                   sub_num_neigh,neighs, num_neigh)
       !print *, 'fps=', fps
       !print *, 'fp is calculated'
-      CALL ghost_dfps_correct(nelement, nAtoms, MAXVAL(nGs), MAX_NEIGHS, num_neigh, neighs, &
-           sub_num_neigh, sub_neighs, temp_dfps, dfps)
-
+      !CALL ghost_dfps_correct(nelement, nAtoms, MAXVAL(nGs), MAX_NEIGHS, num_neigh, neighs, &
+      !     sub_num_neigh, sub_neighs, temp_dfps, dfps)
+      !print*, 'line 518 model.f90'
       !Cleanup ghost parts
-      CALL atomsCleanup
-      
-      CALL update_atomInfo2(nAtoms, nelement, MAXVAL(nGs), in_natarr)
+      !!!CALL atomsCleanup
+      !print*, 'line 521 model.f90'
+      !!!!CALL update_atomInfo(nAtoms, nelement, MAXVAL(nGs), in_natarr)
+      !print*, 'nAtoms: ',nAtoms
+      !print*, 'nelement: ',nelement
+      !print*, 'max_fps: ',max_fps
+      !print*, 'symbols: ',symbols
+      !print*, 'in_natarr: ',in_natarr
+      !!!print *, 'MAXVALS: ',MAXVAL(nGs)
+      CALL update_atomInfo(nAtoms, nelement, MAXVAL(nGs), symbols, in_natarr)
+      !!!CALL update_atomInfo(nAtoms, nelement, max_fps, symbols, in_natarr)
+      !print*, 'line 523 model.f90'
       !print *, 'atomic info is updated'
 
       !Reorder fingerprints
@@ -505,19 +539,33 @@ MODULE PyAMFF
           ordered_fps(j,1:nGs(i),i) = fps(in_atomidx(j,i),1:nGs(i))
         END DO
       END DO
-      CALL normalizeFPs2(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
-      max_natarr,sub_num_neigh,sub_neighs,symbols,ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:))
-
-      CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),sub_neighs(:,1:MAXVAL(sub_num_neigh)),&
-      symbols, in_atomidx, ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:), &
-      MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
+      !CALL normalizeFPs(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
+      !max_natarr,sub_num_neigh,sub_neighs,symbols,ordered_fps, dfps(:,1:MAXVAL(sub_num_neigh)+1,:,:))
+      !CALL normalizeFPs(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
+      !sub_num_neigh,sub_neighs)
+      CALL normalizeFPs(nelement, nAtoms, uniq_elements, MAXVAL(nGs), MAXVAL(sub_num_neigh), &
+      sub_num_neigh,neighs)
+      !print*, 'line 536 model.f90'
+      !CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),sub_neighs(:,1:MAXVAL(sub_num_neigh)),&
+      !ordered_fps, &
+      !MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
+      !CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),sub_neighs(:,1:MAXVAL(sub_num_neigh)),&
+      !fps, MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
+      !!!CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),neighs(:,1:MAXVAL(sub_num_neigh)),&
+      !!fps, MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
+      CALL forward(sub_num_neigh, MAXVAL(sub_num_neigh),neighs(:,1:MAXVAL(sub_num_neigh)),&
+      ordered_fps, MAXVAL(nGs), max_natarr, MAXVAL(nhidneurons))
+      !print*, 'line 542 model.f90'
       !print *, 'forward propagation is done'
       !print *, 'Etotal=', Etotal
       !print *, 'forces=', forces
       predE=Etotal
       predF=forces
-      CALL nncleanup_atom
-     
+      !CALL nncleanup_atom
+      CALL atomsCleanup
+      !!! WE NEED TO CALL SOME CLEANUP SUBROUTINE, but not here v  
+      !CALL nncleanup !!!THIS DE-ALLOCATES nGs which then breaks things ; but need to replace somewhere
+   
     END SUBROUTINE
 
     SUBROUTINE PyAMFF_clean(opt_type,opt_flag)
@@ -530,6 +578,8 @@ MODULE PyAMFF
         CALL traincleanup(opt_type)
       ELSE
         CALL backcleanup
+        !print*, 'here going to call nncleanup line 579 model.f90'
+        CALL nncleanup
       END IF  
     END SUBROUTINE
 
