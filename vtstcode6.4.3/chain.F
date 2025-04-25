@@ -346,6 +346,7 @@
           ENDIF
         END IF
 
+      if(iu6>0) write(*,*) "chain_force8"
         ! 2D calculations (only in x,y)
         IF (twodim_flag) THEN
           stress(1,3) = 0._q
@@ -353,12 +354,22 @@
           stress(3,3) = 0._q
         ENDIF
 
+      if(iu6>0) write(*,*) "chain_force8aa"
         ! zero out any added forces on frozen atoms
         ! atomic constraints in direct coordinates, thanks to Christopher Stihl
+      if(iu6>0) write(*,*) "NIONS: ", NIONS
+      if(iu6>0) write(*,*) "force: ", force
+      if(iu6>0) write(*,*) "Free: ", Free
+      if(iu6>0) write(*,*) "B: ", B
+      if(iu6>0) write(*,*) "A: ", A
         CALL KARDIR(NIONS, force, B)
+      if(iu6>0) write(*,*) "chain_force8ab"
         force = force*Free
+      if(iu6>0) write(*,*) "chain_force8ac"
         CALL DIRKAR(NIONS, force, A)
+      if(iu6>0) write(*,*) "chain_force8ad"
 
+      if(iu6>0) write(*,*) "chain_force8a"
         ! for dimer/lanczos, check force criteria using the vasp force
         IF (ICHAIN == 2 .OR. ICHAIN == 3) THEN
           force_dimlan = force
@@ -371,6 +382,7 @@
           IF (IOPT == 8 .AND. (.NOT. optflag)) ml_chain = .FALSE. 
         ENDIF
 
+      if(iu6>0) write(*,*) "chain_force8b"
         ftot = 0._q
         fmaxatom = 0._q
         fmaxdim = 0._q
@@ -388,6 +400,7 @@
         frms = SQRT(ftot/REAL(nions))
         fmaxatom = SQRT(fmaxatom)
 
+        IF(iu6>0) write(*,*) "chain_force9"
         ! Check if ML-optimizer should be turned on or not 
         ! This check should happen when ml_chain_iter == 1 (when force is DFT chain force)
         IF (IOPT == 8) THEN
@@ -1154,7 +1167,6 @@
 
       ! write the version number
       IF (IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.2, (11/09/24)'
-
       IF (IU6>=0) WRITE(IU6,*) 'CHAIN: initializing optimizer'
 
       ! initialize optimizer
@@ -1376,6 +1388,7 @@
       CALL bbm_init(T_INFO,IO)
       ENDIF
 
+      IF (iu6>=0) WRITE(iu6,*) 'before allocate FREE'
       ! Make vector to zero out force on frozen atoms 
       ALLOCATE(Free(3, T_INFO%nions))
       Free(:,:) = 1._q
@@ -1386,6 +1399,8 @@
           ENDDO
         ENDDO
       ENDIF
+      IF (iu6>=0) WRITE(iu6,*) 'after allocate FREE'
+      IF (iu6>=0) WRITE(iu6,*) 'FREE: ',Free
 
 #ifdef VASP_MPMD
       IF (LMPMD .EQV. .TRUE.) THEN

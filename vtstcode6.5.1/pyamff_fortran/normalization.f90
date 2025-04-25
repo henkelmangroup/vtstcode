@@ -21,7 +21,7 @@ MODULE normalize
         INTEGER, DIMENSION(nelement) :: idx_arr, idx_arr2
         !INTEGER, DIMENSION(nAtoms, max_nneighs) :: neighborlists
         INTEGER, DIMENSION(nAtoms, MAX_NNEIGHS) :: neighborlists
-        CHARACTER*3, DIMENSION(nelement) :: uniq_elements
+        CHARACTER*2, DIMENSION(nelement) :: uniq_elements
         !DOUBLE PRECISION, DIMENSION(nAtoms, MAX_FPS) :: fps
         !DOUBLE PRECISION, DIMENSION(nAtoms, MAX_NNEIGHS, 3, MAX_FPS) :: dfps
 

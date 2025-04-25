@@ -72,11 +72,12 @@
     REAL(q) :: Uvasp, Ueam
 #endif
 
-!!! Tempering variables
-
     REAL(q),ALLOCATABLE,SAVE :: posion_all(:,:,:)
     REAL(q) :: spring=10
     INTEGER :: nions_max
+
+!!! Tempering variables
+
  ! tag VCAIMAGES allows to perform two MD's with e.g. different POTCAR files
  ! allowing to do force averaging
     LOGICAL :: LVCAIMAGES
@@ -99,6 +100,10 @@
 
     INTEGER, ALLOCATABLE, SAVE :: ATTEMPTS(:)
     INTEGER, ALLOCATABLE, SAVE :: SUCCESS(:)
+    !> random variable between [0,NTEMPER*2]
+    !> will be decremented and when 0 is reached
+    !> replica exchange is attempted
+    INTEGER, SAVE :: NTEMPER_NEXT=0 
 !!!
  ! ML-PYAMFF
     INTEGER :: ml_chain_iter, max_iter
@@ -137,8 +142,6 @@
       REAL(q) :: dft_fmaxatom, ml_fmaxatom, toten_ml
       REAL(q), DIMENSION(3,nions) :: force_mlreturn, force_ml, init_R, posion_ml
 
-      IF (iu6>=0) WRITE(iu6,*) 'into chain_force'
-      IF (iu6>=0) WRITE(iu6,*) 'FREE: ',Free
 #if defined(MPI) || defined (MPI_CHAIN)
       node = comm_chain%node_me
 
@@ -355,6 +358,7 @@
 
         ! zero out any added forces on frozen atoms
         ! atomic constraints in direct coordinates, thanks to Christopher Stihl
+
         CALL KARDIR(NIONS, force, B)
         force = force*Free
         CALL DIRKAR(NIONS, force, A)
@@ -1160,7 +1164,7 @@
       IU6 = IO%IU6
 
       ! write the version number
-      IF (IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 4.2, (11/09/24)'
+      IF (IU6>=0) WRITE(IU6,'(/,A,/)') ' VTST: version 5.1, (04/25/25)'
 
       IF (IU6>=0) WRITE(IU6,*) 'CHAIN: initializing optimizer'
 

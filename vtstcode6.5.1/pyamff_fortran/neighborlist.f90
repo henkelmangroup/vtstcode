@@ -161,7 +161,7 @@ MODULE nlist
             DO j = i+1, nAtoms
                 v_dir = pos_dir(j,:) - pos_dir(i,:)
                 v_dir_o = v_dir
-                v_dir = MOD(v_dir + 100.5, 1.0) - 0.5
+                v_dir = MOD(v_dir + 100.5d0, 1.0d0) - 0.5d0
                 v_car = MATMUL(dir2car, v_dir)
                 dist2 = SUM(v_car*v_car)
                 IF (dist2<rcut2) THEN

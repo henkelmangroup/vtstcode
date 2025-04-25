@@ -172,7 +172,7 @@ MODULE lbfgs_ml
 
     ! compute step length
     IF (epoch == 1) THEN
-      step = MIN(1.0, (1.0d0 / SUM(ABS(flat_grad)))) * lr ! scaled first step to be consistent with pytorch
+      step = MIN(1.0d0, (1.0d0 / SUM(ABS(flat_grad)))) * lr ! scaled first step to be consistent with pytorch
     ELSE
       step = lr
     END IF
