@@ -672,7 +672,7 @@
       latt_b_all(:,:,images+1)= LATT_CUR%B
       omega_last = LATT_CUR%OMEGA
 
-      ! default jacobian is avg legnth/atom 
+      ! default jacobian is avg length/atom 
       jacobian=(0.5_q*(omega_first+omega_last)/DBLE(nions))**(1._q/3._q)*sqrt(DBLE(nions))
       ! read the jacobian 
       CALL RDATAB(IO%LOPEN,'INCAR',IO%IU5,'JACOBIAN','=','#',';','F', &

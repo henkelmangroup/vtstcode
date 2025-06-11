@@ -81,7 +81,7 @@
         IF (fdstep .EQV. .TRUE.) THEN
           direction = F/SQRT(SUM(F*F))
 
-          IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, initial finite difference'
+          IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, initial finite difference'
 
           Rold = R
           Fold = F
@@ -94,7 +94,7 @@
           ! Compute invcurv.
           ! calculate curvature down direction
           direction = R - Rold
-          DO im=1,images_local
+          DO im = 1, images_local
             CALL set_pbc(direction(:,:,im))
           ENDDO
           direction_norm = SQRT(SUM(direction*direction))
@@ -106,51 +106,51 @@
           ! steps will be taken along the descent direction. This conservative
           ! approach helps when the forces are noisy.
           invcurv = 1.0_q / curvature / damping
-          IF(iu6>0) write(iu6,*) 'OPT: LBFGS, invcurv = ', invcurv
+          IF (iu6>0) write(iu6,*) 'OPT: LBFGS, invcurv = ', invcurv
 
           IF (invcurv .LT. 0.0) THEN
             reset_flag = .TRUE.
             maxmove_flag = .TRUE.
-            IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, reset due to negative curvature'
+            IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, reset due to negative curvature'
           ENDIF
 
           ! Reset the lbfgs memory
-          IF(reset_flag) THEN
+          IF (reset_flag) THEN
              itr = 0
              reset_flag = .FALSE.
           ELSE
              ! find new direction
              itr = itr + 1
              IF (itr .LE. memory) THEN
-               IF(iu6>0) write(iu6,*) 'OPT: LBFGS, adding new vector'
+               IF (iu6>0) write(iu6,*) 'OPT: LBFGS, adding new vector'
 
                change_in_G(itr,:,:,:) = -(F-Fold)
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaG:'
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaG:'
                IF (global .AND. (images_local .GT. 1)) THEN
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,node)
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,node)**2,DIM=2)))
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,node)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,node)**2,DIM=2)))
                ELSE
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,1)
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,1)**2,DIM=2)))
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,1)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') MAXVAL(SQRT(SUM(change_in_G(itr,:,:,1)**2,DIM=2)))
                ENDIF
 
                change_in_R(itr,:,:,:) = R-Rold 
                ! apply periodic boundary conditions to these vector differences
-               DO im=1,images_local
+               DO im = 1, images_local
                  CALL set_pbc(change_in_R(itr,:,:,im))
                ENDDO
 
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaR:'
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaR:'
                IF (global .AND. (images_local .GT. 1)) THEN
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,node)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,node)
                ELSE
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,1)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,1)
                ENDIF
 
                rho(itr) = 1.0_q/SUM(change_in_G(itr,:,:,:)*change_in_R(itr,:,:,:))
              ELSE
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, shifting vectors'
-               DO im = 1,memory-1
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, shifting vectors'
+               DO im = 1, memory-1
                  change_in_G(im,:,:,:) = change_in_G(im+1,:,:,:)
                  change_in_R(im,:,:,:) = change_in_R(im+1,:,:,:)
                  rho(im) = rho(im+1)
@@ -163,7 +163,7 @@
                ENDDO
                rho(memory) = 1.0_q/SUM(change_in_G(memory,:,:,:)*change_in_R(memory,:,:,:))
              ENDIF
-             IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ',itr,rho(itr)
+             IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ',itr,rho(itr)
           ENDIF
 
           Rold = R
@@ -175,7 +175,7 @@
           ELSE
             bound = memory
           ENDIF
-          IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, bound: ',bound
+          IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, bound: ',bound
           direction = -1._q*F
           
           ! calculate Ho*g
@@ -185,7 +185,7 @@
             direction = direction - (alpha(jm)*change_in_G(jm,:,:,:))
           ENDDO
           direction = invcurv*direction !Ho=Ho*invcurv Ho is identity matrix
-          DO im=1,bound
+          DO im = 1, bound
             beta = rho(im)*SUM(change_in_G(im,:,:,:)*direction)
             direction = direction + change_in_R(im,:,:,:)*(alpha(im)-beta)
           ENDDO
@@ -199,7 +199,7 @@
             step_size = SQRT(REAL(images_local))*maxmove 
             ! If we make max move step take steepest descent step.
             direction = step_size * F/SQRT(SUM(F*F))
-            IF(iu6>0) write(iu6,*) 'OPT: LBFGS, reset due to max move taking SD step'
+            IF (iu6>0) write(iu6,*) 'OPT: LBFGS, reset due to max move taking SD step'
           ENDIF
 
           IF (maxmove_flag .EQV. .TRUE.) THEN
@@ -217,7 +217,7 @@
       ! =========================
       ELSE
         IF (fdstep) THEN  ! Finite difference step
-          IF(iu6>0) WRITE(iu6,*) "OPT: LBFGS in fdstep"
+          IF (iu6>0) WRITE(iu6,*) "OPT: LBFGS in fdstep"
 
           fdstep = .FALSE.
           optflag = .TRUE. ! keep control to do finite difference step
@@ -227,48 +227,48 @@
           a2 = SUM(Fold*Fold)
   !        IF ((a1 .LE. 0.5_q*a2) .AND. (a2 .NE. 0.0_q)) THEN
           IF ((a1 .GT. 0.5_q*a2) .OR. (a2 .EQ. 0.0_q)) THEN
-             reset_flag=.TRUE.
+             reset_flag = .TRUE.
           ENDIF
 
-          IF (lineopt .EQV. .FALSE.) reset_flag=.FALSE.
-          IF (a2 .EQ. 0.0_q) reset_flag=.TRUE.
+          IF (lineopt .EQV. .FALSE.) reset_flag = .FALSE.
+          IF (a2 .EQ. 0.0_q) reset_flag = .TRUE.
 
           ! Reset the lbfgs memory
-          IF(reset_flag) THEN
-             IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, init'
+          IF (reset_flag) THEN
+             IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, init'
              itr=0
              reset_flag = .FALSE.
           ELSE
              ! find new direction
              itr = itr + 1
              IF (itr .LE. memory) THEN
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, adding new vector'
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, adding new vector'
 
                change_in_G(itr,:,:,:) = -(F-Fold)
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaG:'
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaG:'
                IF (global .AND. (images_local .GT. 1)) THEN
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,node)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,node)
                ELSE
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,1)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_G(itr,:,:,1)
                ENDIF
 
                change_in_R(itr,:,:,:) = R - Rold 
                ! apply periodic boundary conditions to these vector differences
-               DO im=1,images_local
+               DO im = 1, images_local
                  CALL set_pbc(change_in_R(itr,:,:,im))
                ENDDO
 
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaR:'
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, DeltaR:'
                IF (global .AND. (images_local .GT. 1)) THEN
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,node)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,node)
                ELSE
-                 IF(iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,1)
+                 IF (iu6>0) WRITE(iu6,'(3f16.8)') change_in_R(itr,:,:,1)
                ENDIF
 
-               rho(itr)=1.0_q/SUM(change_in_G(itr,:,:,:)*change_in_R(itr,:,:,:))
+               rho(itr) = 1.0_q/SUM(change_in_G(itr,:,:,:)*change_in_R(itr,:,:,:))
              ELSE
-               IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, shifting vectors'
-               DO im = 1,memory-1
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, shifting vectors'
+               DO im = 1, memory-1
                  change_in_G(im,:,:,:) = change_in_G(im+1,:,:,:)
                  change_in_R(im,:,:,:) = change_in_R(im+1,:,:,:)
                  rho(im) = rho(im+1)
@@ -276,12 +276,12 @@
                change_in_G(memory,:,:,:) = -(F - Fold)
                change_in_R(memory,:,:,:) = R - Rold
                ! apply periodic boundary conditions to these vector differences
-               DO im=1,images_local
+               DO im = 1, images_local
                  CALL set_pbc(change_in_R(memory,:,:,im))
                ENDDO
                rho(memory) = 1.0_q/SUM(change_in_G(memory,:,:,:)*change_in_R(memory,:,:,:))
              ENDIF
-             IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ', itr, rho(itr)
+             IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ', itr, rho(itr)
           ENDIF
 
           Rold = R
@@ -293,33 +293,33 @@
           ELSE
             bound = memory
           ENDIF
-          IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, bound: ',bound
+          IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, bound: ',bound
           direction = -1._q*F
           
           ! calculate Ho*g
           IF (itr .NE. 0) THEN
-            DO im=1,bound 
+            DO im = 1, bound 
               jm = (bound + 1 - im)
               alpha(jm) = rho(jm)*SUM(change_in_R(jm,:,:,:)*direction)
               direction = direction - (alpha(jm)*change_in_G(jm,:,:,:))
             ENDDO
             direction = invcurv*direction !Ho=Ho*invcurv Ho is identity matrix
-            DO im=1,bound
+            DO im = 1, bound
               beta = rho(im)*SUM(change_in_G(im,:,:,:)*direction)
               direction = direction + change_in_R(im,:,:,:)*(alpha(im)-beta)
             ENDDO
           ENDIF
 
           ! direction down gradient
-          direction= -1._q*direction
+          direction = -1._q*direction
 
           IF (lineopt) THEN ! line minimizer (using fdstep)
             direction = direction/SQRT(SUM(direction*direction))
 
-            IF(iu6>0) WRITE(iu6,*) 'OPT: LBFGS, direction:'
+            IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, direction:'
 
             IF (global .AND. (images_local .GT. 1)) THEN
-              IF(iu6>0) WRITE(iu6,'(3f16.8)') direction(:,:,node)
+              IF (iu6>0) WRITE(iu6,'(3f16.8)') direction(:,:,node)
             ENDIF
             ! finite step down force
             R = R + direction*finite_step
@@ -384,15 +384,15 @@
 
   !30  CONTINUE
 
-      IF(iu6>0) THEN
-        WRITE(iu6,*)'OPT: LBFGS: positions in Cartesian coordinates' 
+      IF (iu6>0) THEN
+        WRITE(iu6,*) 'OPT: LBFGS: positions in Cartesian coordinates' 
         WRITE(iu6,'(3f16.8)') posion
       ENDIF
       ! convert position back to direct cord
       CALL kardir(nions, posion, latt_b)
 !#endif
 
-      IF(iu6>0) WRITE(iu6,*) "OPT: LBFGS END subroutine"
+      IF (iu6>0) WRITE(iu6,*) "OPT: LBFGS END subroutine"
     END SUBROUTINE lbfgs_step
 
 !**********************************************************************
