@@ -8,7 +8,8 @@ MODULE fpCalc
     IMPLICIT NONE
     PRIVATE
     PUBLIC :: read_fpParas, read_mlffParas, calcg2s_n, calcfps, cleanup, read_mlff, calcg1s, &
-              atomsCleanup, cleanup_ase, clean_mlff
+              atomsCleanup, cleanup_ase, clean_mlff, &
+              update_mlff_model, update_mlff, write_mlff
     TYPE (fingerprints),DIMENSION(:),ALLOCATABLE,SAVE :: fpParas
     DOUBLE PRECISION, SAVE :: max_rcut   !fetch rcut from fpParas
     CHARACTER*2, DIMENSION(:), ALLOCATABLE :: uniq_elements
@@ -330,18 +331,20 @@ MODULE fpCalc
         !CHARACTER*2, DIMENSION(nelement) :: uniq_element
 
         ! Variables
-        INTEGER :: numGs, nFPs, cidx, nidx, nidx1, nidx2, tempidx
+        INTEGER :: nFPs, cidx, nidx, nidx1, nidx2, tempidx
         INTEGER :: i, j, k, accN, currIndex, m, n
         INTEGER, DIMENSION(nelement) :: fprange_idx 
         DOUBLE PRECISION :: djunk, fpmin, fpmax, eta, Rs, rcut, thetas, zeta, lambda
         CHARACTER*3 :: center, neigh1, neigh2, cjunk
         CHARACTER(LEN=30) :: G_type, line
         CHARACTER*3, DIMENSION(92) :: elementArray
+        INTEGER, DIMENSION(:), ALLOCATABLE :: numGs, tnumGs
 
-        INTEGER:: myid
+        INTEGER:: myid, ios
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights,flatten_hidweights
         CHARACTER(LEN=30) :: model_type
         CHARACTER*2 :: atom_type
+        LOGICAL :: haveV1 = .FALSE.
 
         DATA elementArray / "H","He","Li","Be","B","C","N","O", &
                  "F","Ne","Na","Mg","Al","Si","P","S","Cl","Ar","K","Ca","Sc", &
@@ -373,18 +376,22 @@ MODULE fpCalc
             END DO
         END DO
 
+        IF(ALLOCATED(numGs)) THEN 
+          DEALLOCATE(numGs)
+        END IF
+        IF(ALLOCATED(tnumGs)) THEN 
+          DEALLOCATE(tnumGs)
+        END IF
+        ALLOCATE(numGs(nelement))
+        ALLOCATE(tnumGs(nelement))
+        numGs = 0
+        tnumGs = 0
         ! Outputs
         ALLOCATE (uniq_elements(nelement))
         ALLOCATE(natoms_arr(nelement))
         ALLOCATE(nGs(nelement))
-        ALLOCATE(fpminvs(MAX_FPS, nelement))
-        ALLOCATE(fpmaxvs(MAX_FPS, nelement))
-        ALLOCATE(diffs(MAX_FPS, nelement))
         
         nGs = 0
-        fpminvs = 0
-        fpmaxvs = 0
-        diffs = 0
         fprange_idx = 0
 
         !Define common variables for fNN
@@ -440,10 +447,24 @@ MODULE fpCalc
                 READ (11,*) line! skip # type 
             END IF
             IF (line .EQ. "#MachineLearning") GOTO 40
-            READ (11,*) G_type, numGs
+            READ (11,*,IOSTAT=ios) G_type, numGs
+            IF (ios .LT. 0) THEN
+                WRITE(*,*) "End-of-file reached while reading 'mlff.pyamff'"
+                STOP
+            ELSE IF (ios .EQ. 5010) THEN
+                ! This is the error code corresponding to "Bad real number in item 3 of list input"
+                ! It means that we have 1 number representing the total number instead of a number per element
+                IF(.NOT. haveV1) WRITE(*,*) "WARNING: V1 of mlff.pyamff detected. A new mlff.pyamff will be generated."
+                haveV1 = .TRUE.
+            END IF
             IF (G_type .EQ. 'G1') THEN
-                nG1 = numGs
-                READ (11,*) !skip # center neighbor ...
+                ! nG1 = numGs
+                IF (.NOT. haveV1) THEN
+                    nG1 = SUM(numGs)
+                    READ (11,*) ! skip # center neighbor ...
+                ELSE
+                    nG1 = numGs(1)
+                END IF
                 DO i = 1, nG1
                     READ (11,*) center, neigh1, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
@@ -451,9 +472,15 @@ MODULE fpCalc
                     nGs(cidx) = nGs(cidx) + 1
                     fpParas(cidx)%g1s(nidx)%nFPs = fpParas(cidx)%g1s(nidx)%nFPs + 1
                 END DO
+                IF (haveV1) numGs = nGs
             ELSE IF (G_type .EQ. 'G2') THEN
-                nG2 = numGs
-                READ (11,*) !skip # center neighbor ...
+                ! nG2 = numGs
+                IF (.NOT. haveV1) THEN
+                    nG2 = SUM(numGs)
+                    READ (11,*) ! skip # center neighbor ...
+                ELSE
+                    nG2 = numGs(1)
+                END IF
                 DO i = 1, nG2
                     READ (11,*) center, neigh1, neigh2, djunk, djunk, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
@@ -465,11 +492,20 @@ MODULE fpCalc
                         fpParas(cidx)%g2s(nidx2, nidx1)%nFPs = fpParas(cidx)%g2s(nidx2, nidx1)%nFPs + 1
                     END IF
                 END DO
+                IF (haveV1) numGs = nGs
             END IF
+            tnumGs = tnumGs + numGs
         END DO
 
   40    REWIND 11
         !print*, 'allocating fpParas'
+        MAX_FPs = MAXVAL(tnumGs)
+        ALLOCATE(fpminvs(MAX_FPS, nelement))
+        ALLOCATE(fpmaxvs(MAX_FPS, nelement))
+        ALLOCATE(diffs(MAX_FPS, nelement))
+        fpminvs = 0
+        fpmaxvs = 0
+        diffs = 0
         ! ALLOCATE fpParas
         DO i = 1, nelement
             DO j = 1, nelement
@@ -480,18 +516,22 @@ MODULE fpCalc
                 DO k = 1, nelement
                     nFPs = fpParas(i)%g2s(j,k)%nFPs
                     IF (nFPs .GT. 0) THEN
-                    ALLOCATE(fpParas(i)%g2s(j,k)%etas(nFPs))
-                    ALLOCATE(fpParas(i)%g2s(j,k)%gammas(nFPs))
-                    ALLOCATE(fpParas(i)%g2s(j,k)%lambdas(nFPs))
-                    ALLOCATE(fpParas(i)%g2s(j,k)%zetas(nFPs))
-                    ALLOCATE(fpParas(i)%g2s(j,k)%r_cuts(nFPs))
-                    ALLOCATE(fpParas(i)%g2s(j,k)%theta_ss(nFPs))
-                      fpParas(i)%g2s(j,k)%etas = 0.0
-                      fpParas(i)%g2s(j,k)%gammas = 0.0
-                      fpParas(i)%g2s(j,k)%lambdas = 0.0
-                      fpParas(i)%g2s(j,k)%zetas = 0.0
-                      fpParas(i)%g2s(j,k)%r_cuts = 0.0
-                      fpParas(i)%g2s(j,k)%theta_ss = 0.0
+                        ALLOCATE(fpParas(i)%g2s(j,k)%etas(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%gammas(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%lambdas(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%zetas(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%r_cuts(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%theta_ss(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%g2(nFPs))
+                        ALLOCATE(fpParas(i)%g2s(j,k)%dg2(3,3,nFPs)) ! atoms w.r.t * 
+                        fpParas(i)%g2s(j,k)%etas = 0.0
+                        fpParas(i)%g2s(j,k)%gammas = 0.0
+                        fpParas(i)%g2s(j,k)%lambdas = 0.0
+                        fpParas(i)%g2s(j,k)%zetas = 0.0
+                        fpParas(i)%g2s(j,k)%r_cuts = 0.0
+                        fpParas(i)%g2s(j,k)%theta_ss = 0.0
+                        fpParas(i)%g2s(j,k)%g2 = 0.0
+                        fpParas(i)%g2s(j,k)%dg2 = 0.0
                     END IF
                 END DO
             END DO
@@ -515,7 +555,11 @@ MODULE fpCalc
             READ (11,*)
             READ (11,*) ! # type
         END IF
-        READ (11,*) G_type, numGs
+        IF (.NOT. haveV1) THEN
+            READ (11,*) G_type, numGs
+        ELSE
+            READ(11,*) G_type, numGs(1)
+        END IF
         IF (nG1 .GT. 0) THEN
             READ (11,*) !skip center ...
             DO i = 1, nG1
@@ -559,7 +603,11 @@ MODULE fpCalc
         IF (nG2 .GT. 0) THEN
             IF (nG1 .GT. 0) THEN
                 READ (11,*) !skip type ...
-                READ (11,*) G_type, numGs
+                IF (.NOT. haveV1) THEN
+                    READ (11,*) G_type, numGs
+                ELSE
+                    READ (11,*) G_type, numGs(1)
+                END IF
             ELSE
                 CONTINUE
             END IF    
@@ -660,6 +708,7 @@ MODULE fpCalc
         ALLOCATE(interceptScale(MAX_FPS, MAXVAL(natoms_arr), nelement))
         magnitude = 0
         interceptScale = 0
+        atom_idx = 0
         !Store magnitude interceptScale in memory
         CALL normalizeParas(nelement)
 
@@ -683,17 +732,19 @@ MODULE fpCalc
         CHARACTER*3 :: center, neigh1, neigh2, cjunk
         CHARACTER*20 :: mlff_file
         CHARACTER(LEN=30) :: G_type, line
-        CHARACTER*3, DIMENSION(92) :: elementArray
+        ! CHARACTER*3, DIMENSION(92) :: elementArray
 
         INTEGER :: myid
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights, flatten_hidweights
-        CHARACTER(LEN=30) :: model_type
+        CHARACTER(LEN=30) :: model_type,comment
         CHARACTER*2 :: atom_type
 
         CHARACTER(len=2), DIMENSION(nelement) :: coheElement
         DOUBLE PRECISION, DIMENSION(nelement) :: temp_coheEs
         INTEGER,PARAMETER :: seedval = 6 !!!Dummy starter (Eboni suggested) ... 
         INTEGER :: ios
+        LOGICAL :: haveV2 = .FALSE., haveV1 = .FALSE., haveV2_noparams = .FALSE.
+
         IF(ALLOCATED(coheEs)) THEN
           DEALLOCATE(coheEs)
         END IF
@@ -792,11 +843,24 @@ MODULE fpCalc
                 READ (11,*) line ! skip # type 
             END IF
             IF (line .EQ. "#MachineLearning") GOTO 40
-            READ (11,*) G_type, numGs(:)
-            tnumGs = tnumGs + numGs
+            READ (11,*,IOSTAT=ios) G_type, numGs
+            ! If ios == 0, then things are okay
+            IF (ios .LT. 0) THEN
+                WRITE(*,*) "End-of-file reached while reading " // TRIM(mlff_file)
+                STOP
+            ELSE IF (ios .EQ. 5010) THEN 
+                ! This is the error code corresponding to "Bad real number in item 3 of list input"
+                ! It means that we have 1 number representing the total number instead of a number per element
+                IF(.NOT. haveV1) WRITE(*,*) "WARNING: V1 of mlff.pyamff detected. A new mlff.pyamff will be generated."
+                haveV1 = .TRUE.
+            END IF
             IF (G_type .EQ. 'G1') THEN
-                nG1 = SUM(numGs)
-                READ (11,*) ! skip # center neighbor ...
+                IF (.NOT. haveV1) THEN
+                    nG1 = SUM(numGs)
+                    READ (11,*) ! skip # center neighbor ...
+                ELSE
+                    nG1 = numGs(1)
+                END IF
                 DO i = 1, nG1
                     READ (11,*) center, neigh1, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
@@ -804,11 +868,16 @@ MODULE fpCalc
                     nGs(cidx) = nGs(cidx) + 1
                     fpParas(cidx)%g1s(nidx)%nFPs = fpParas(cidx)%g1s(nidx)%nFPs + 1
                 END DO
+                IF (haveV1) numGs = nGs
             !print *, 'line 806 fingerprints.f90'
 
             ELSE IF (G_type .EQ. 'G2') THEN
-                nG2 = SUM(numGs)
-                READ (11,*) ! skip # center neighbor ...
+                IF (.NOT. haveV1) THEN
+                    nG2 = SUM(numGs)
+                    READ (11,*) ! skip # center neighbor ...
+                ELSE
+                    nG2 = numGs(1)
+                END IF
                 DO i = 1, nG2
                     READ (11,*) center, neigh1, neigh2, djunk, djunk, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
@@ -821,7 +890,9 @@ MODULE fpCalc
                         fpParas(cidx)%g2s(nidx2, nidx1)%nFPs = fpParas(cidx)%g2s(nidx2, nidx1)%nFPs + 1
                     END IF
                 END DO
+                IF (haveV1) numGs = nGs
             END IF
+            tnumGs = tnumGs + numGs
         END DO
         !print *, 'line 825 fingerprints.f90'
 
@@ -890,7 +961,11 @@ MODULE fpCalc
             READ (11,*)
             READ (11,*) !skip # type
         END IF
-        READ (11,*) G_type, numGs
+        IF (.NOT. haveV1) THEN
+            READ (11,*) G_type, numGs
+        ELSE
+            READ(11,*) G_type, numGs(1)
+        END IF
         IF (nG1 .GT. 0) THEN
             READ (11,*) !skip center ...
             DO i = 1, nG1
@@ -935,7 +1010,11 @@ MODULE fpCalc
         IF (nG2 .GT. 0) THEN
             IF (nG1 .GT. 0) THEN
                 READ (11,*) !skip type ...
-                READ (11,*) G_type, numGs
+                IF (.NOT. haveV1) THEN
+                    READ (11,*) G_type, numGs
+                ELSE
+                    READ (11,*) G_type, numGs(1)
+                END IF
             ELSE
                 CONTINUE
             END IF    
@@ -1046,7 +1125,17 @@ MODULE fpCalc
         READ (11,*) model_type
         READ (11,*) !Skip #Activation function type
         READ (11,*) actfuncId
-        READ (11,*) !Skip command line
+        !2025-02 changed so that weights and biases are at the end 
+        READ (11,*) comment
+        IF ((comment(:6) .EQ. "#Model") .AND. (.NOT. haveV1)) THEN
+            WRITE(*,*) "WARNING: V2 of mlff.pyamff detected. A new mlff.pyamff will be generated."
+            haveV2 = .TRUE.
+        END IF
+        IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) THEN
+            READ (11,*) scaler_type
+            READ (11,*) slope, intercept
+            READ (11,*) !Skip command line
+        END IF
         READ (11,*) nhidlayers
         IF(ALLOCATED(nhidneurons)) THEN 
           DEALLOCATE(nhidneurons)
@@ -1080,41 +1169,53 @@ MODULE fpCalc
             ! Find index of corresponding atom_type
             myid=find_loc_char(uniq_elements, atom_type, SIZE(uniq_elements))
             ! Input weights, biases
+            IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !inputLayer weights tag
             !print*, 'myid ', myid, nGs(myid)*nhidneurons(1)
             READ (11,*,IOSTAT=ios) flatten_inweights(1:nGs(myid)*nhidneurons(1))
-            IF (ios ==59) THEN
+            IF (ios .EQ. 59) THEN ! 59 is if have "#Energy Scaling Parameters"
+                haveV2_noparams = .TRUE.
                 CALL initialize_NN_params(uniq_elements, seedval)
-            ELSE
-            weights(1:nGs(myid),1:nhidneurons(1),1,myid) = &
-                reshape(flatten_inweights(1:nGs(myid)*nhidneurons(1)),(/nGs(myid),nhidneurons(1)/))
-
-            READ (11,*) biases(1,1:nhidneurons(1),1,myid)
+            ELSE IF (ios .LT. 0) THEN ! EOF
+                CALL initialize_NN_params(uniq_elements, seedval)
+            ELSE IF (ios .EQ. 0) THEN
+                weights(1:nGs(myid),1:nhidneurons(1),1,myid) = &
+                    reshape(flatten_inweights(1:nGs(myid)*nhidneurons(1)),(/nGs(myid),nhidneurons(1)/))
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !inputLayer bias tag
+                READ (11,*) biases(1,1:nhidneurons(1),1,myid)
                 ! Hidden weights, biases
                 DO j = 1, nhidlayers-1
+                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !hiddenLayer weights tag
                     READ (11,*) flatten_hidweights(1:nhidneurons(j)*nhidneurons(j+1))
-                weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,myid) = &
+                    weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,myid) = &
                         reshape(flatten_hidweights(1:nhidneurons(j)*nhidneurons(j+1)),(/nhidneurons(j), nhidneurons(j+1)/))
-                READ (11,*) biases(1,1:nhidneurons(j+1),j+1,myid)
+                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !hiddenLayer bias tag
+                    READ (11,*) biases(1,1:nhidneurons(j+1),j+1,myid)
                 END DO
                 ! Out weights, biases
-            READ (11,*) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,myid)
-            READ (11,*) biases(1,1,nhidlayers+1,myid)
-            !!! IF (i ==  nelements) READ (11,*) !
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !outputLayer weights tag
+                READ (11,*) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,myid)
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !outputLayer bias tag
+                READ (11,*) biases(1,1,nhidlayers+1,myid)
+                !!! IF (i ==  nelements) READ (11,*) !
+            ELSE
+                WRITE(*,'(A,I4,A)') "Error (",ios,") while reading in weights and biases from '" // TRIM(ADJUSTL(mlff_file)) // "'"
+                CLOSE(11)
+                STOP
             END IF
         END DO
-        !print *, 'line 1098 fingerprints.f90'
-        !print *, 'scaler_type: ',scaler_type
-        IF (ios ==0) THEN
-            READ (11,*) !skip command
+        IF (haveV2 .OR. haveV1) THEN
+            IF (.NOT. haveV2_noparams) READ (11,*) ! skip command
+            READ (11,*) scaler_type
+            READ (11,*) slope, intercept
+            CLOSE(11)
+            IF (haveV2) CALL update_mlff(mlff_file)
+            IF (haveV1) THEN 
+                CALL RENAME(TRIM(mlff_file),TRIM(ADJUSTL(mlff_file)) // ".v1")
+                CALL write_mlff(mlff_file)
+            END IF
+        ELSE
+            CLOSE (11)
         END IF
-        !print *, 'LINE 1107 fps.f90'
-        READ (11,*) scaler_type
-        !print *, 'LINE 1110 fps.f90'
-        !print *, "scaler_type:'" //scaler_type// "'"
-        READ (11,*) slope, intercept
-        !print *, 'slope, intercept: ',slope,  intercept
-        CLOSE (11)
-        !print *, 'line 111 END of read_mlff fingerprints.f90'
 
     END SUBROUTINE
 
@@ -1891,4 +1992,314 @@ MODULE fpCalc
         DEALLOCATE(biases)
     END SUBROUTINE
 
+    SUBROUTINE update_mlff_model(mlff_file,dest_file,prefix)
+        !NOTE: This copies the old mlff_file and just updates the 
+        !      weights and biases section at the end
+        IMPLICIT NONE
+        ! Variables
+        INTEGER :: nelement, nFPs
+        INTEGER :: i, j, k
+        INTEGER :: io, d_unit=22, s_unit=33
+        CHARACTER(len=50) :: mlff_file, out_file
+        CHARACTER(len=50),OPTIONAL :: dest_file ! if don't want the same name
+        CHARACTER(len=50),OPTIONAL :: prefix ! if want the same name, what should the prefix be: prefix_
+        CHARACTER(len=256) :: line
+        CHARACTER(len=25) :: format, tag
+        LOGICAL :: exists, haveDest = .FALSE., havePre = .FALSE.
+        
+        inquire(file=TRIM(ADJUSTL(mlff_file)), exist=exists)
+        IF (.NOT. exists) THEN
+            WRITE(*,*) "ERROR: '" // TRIM(ADJUSTL(mlff_file)) // "' does not exist. It cannot be updated."
+            ! STOP
+            !TODO: If it doesn't exist, call the write_mlff function instead of erroring
+            CALL write_mlff(mlff_file)
+            RETURN
+        END IF
+        !TODO: Check both be opened
+        IF (PRESENT(dest_file)) THEN
+            IF (LEN(TRIM(dest_file)) .NE. 0) THEN
+                out_file = dest_file
+                haveDest = .TRUE.
+            END IF
+        ELSE IF(PRESENT(prefix)) THEN
+            IF (LEN(TRIM(prefix)) .NE. 0) THEN
+                tag = TRIM(ADJUSTL(prefix))
+                havePre = .TRUE.
+            END IF
+        END IF
+        IF (.NOT. haveDest) THEN
+            out_file = mlff_file
+            IF (.NOT. havePre) THEN
+                tag = "bkp"
+            ENDIF
+            CALL RENAME(mlff_file,TRIM(ADJUSTL(tag)) // "_" // TRIM(ADJUSTL(mlff_file)))
+            mlff_file = TRIM(ADJUSTL(tag)) // "_" // TRIM(ADJUSTL(mlff_file))
+        END IF
+        OPEN (newunit=s_unit, file=mlff_file, status='old',action='read',iostat=io)
+        OPEN (newunit=d_unit, file=out_file, status='replace',action='write',iostat=io)
+        !copy until we hit Model Parameters
+        DO
+                READ(s_unit,'(A)',iostat=io) line
+                IF (io .NE. 0) THEN ! error >, EOF <, either case we have a problem
+                    WRITE(*,*) "Error while reading file '" // mlff_file // "'"
+                    CLOSE(s_unit)
+                    CLOSE(d_unit)
+                    STOP
+                END IF
+                WRITE(d_unit,'(A)') TRIM(line)
+                IF (line .EQ. "#Model Parameters") THEN
+                    CLOSE(s_unit)
+                    EXIT 
+                END IF
+        END DO
+
+        ! Write NN parameters
+        DO i = 1, nelements
+            ! Write atom type
+            WRITE (d_unit,'(A)') uniq_elements(i)
+            WRITE(format,'(A)') '(5(4X,ES16.8))' ! per 5
+            ! weights, biases
+            WRITE(d_unit,'(2X,A)') " #inputLayer weight"
+            WRITE(d_unit, format) weights(1:nGs(i),1:nhidneurons(1),1,i) 
+            WRITE(d_unit,'(2X,A)') " #inputLayer bias"
+            WRITE(d_unit,format) biases(1,1:nhidneurons(1),1,i)
+            DO j = 1, nhidlayers-1
+                WRITE(d_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," weight"
+                WRITE(d_unit, format) weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,i) 
+                WRITE(d_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," bias"
+                WRITE(d_unit, format) biases(1,1:nhidneurons(j+1),j+1,i)
+            END DO
+            WRITE(d_unit,'(2X,A)') " #outputLayer weight"
+            WRITE(d_unit, format) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,i)
+            WRITE(d_unit,'(2X,A)') " #outputLayer bias"
+            WRITE(d_unit, format) biases(1,1,nhidlayers+1,i)
+        END DO
+        CLOSE (d_unit)
+    END SUBROUTINE
+
+    SUBROUTINE update_mlff(file)
+        USE nnType
+        IMPLICIT NONE
+        !NOTE: This updates V2 mlff.pyamff to the latest (it assumes you have already updated G1 and G2 lines)
+
+        CHARACTER(len=20), OPTIONAL :: file
+        ! Variables
+        INTEGER :: nelement, nFPs
+        INTEGER :: i, j, k
+        INTEGER :: io, d_unit=22, s_unit=33
+        CHARACTER(len=20) :: mlff_file, out_file
+        CHARACTER(len=256) :: line
+        CHARACTER(len=30) :: format
+
+        IF(PRESENT(file)) THEN
+            IF(LEN(TRIM(file)) .NE. 0) THEN
+                mlff_file = file
+            ELSE
+                mlff_file = 'mlff.pyamff'
+            END IF
+        ELSE
+            mlff_file = 'mlff.pyamff'
+        END IF
+        out_file = mlff_file
+        CALL RENAME(TRIM(mlff_file),TRIM(ADJUSTL(mlff_file)) // ".v2")
+        mlff_file = TRIM(ADJUSTL(mlff_file)) // ".v2"
+        OPEN (newunit=s_unit, file=mlff_file, status='old',action='read',iostat=io)
+        OPEN (newunit=d_unit, file=out_file, status='replace',action='write',iostat=io)
+        !copy until we hit Model Structure
+        DO
+                READ(s_unit,'(A)',iostat=io) line
+                IF (io .GT. 0) THEN ! error
+                    WRITE(*,*) "Error while reading file '" // TRIM(ADJUSTL(mlff_file)) // "'"
+                    CLOSE(s_unit)
+                    CLOSE(d_unit)
+                    ERROR STOP
+                ELSE IF (io .LT. 0) THEN ! EOF
+                    EXIT
+                END IF
+                IF (line .EQ. "#Model Structure") THEN
+                    CLOSE(s_unit)
+                    EXIT 
+                END IF
+                WRITE(d_unit,'(A)') TRIM(line)
+        END DO
+        WRITE(d_unit,'(A)') "#Energy Scaling Parameters"
+        WRITE(d_unit,'(A)') scaler_type
+        ! verify that this matches the python side
+        ! WRITE(d_unit,'(1X,F16.8,4X,F16.8,4X,A)') slope,intercept,"#slope  intercept"
+        WRITE(line,'(F16.8,4X,F16.8)') slope,intercept
+        WRITE(d_unit,'(A,4X,A)') ADJUSTL(TRIM(line)),"#slope  intercept"
+        WRITE(d_unit,'(A)') "#Model Structure"
+        WRITE(d_unit,'(I0)') nhidlayers
+        WRITE(format,'(A,I0,A)') "(",nhidlayers,"(I0,1X))" 
+        WRITE(d_unit,format) nhidneurons
+        WRITE(d_unit,'(A)') "#Model Parameters"
+        ! Write NN parameters
+        DO i = 1, nelements
+            ! Write atom type
+            WRITE (d_unit,'(A)') uniq_elements(i)
+            WRITE(format,'(A)') '(5(4X,ES16.8))' ! per 5
+            ! weights, biases
+            WRITE(d_unit,'(2X,A)') " #inputLayer weight"
+            WRITE(d_unit, format) weights(1:nGs(i),1:nhidneurons(1),1,i) 
+            WRITE(d_unit,'(2X,A)') " #inputLayer bias"
+            WRITE(d_unit,format) biases(1,1:nhidneurons(1),1,i)
+            DO j = 1, nhidlayers-1
+                WRITE(d_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," weight"
+                WRITE(d_unit, format) weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,i) 
+                WRITE(d_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," bias"
+                WRITE(d_unit, format) biases(1,1:nhidneurons(j+1),j+1,i)
+            END DO
+            WRITE(d_unit,'(2X,A)') " #outputLayer weight"
+            WRITE(d_unit, format) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,i)
+            WRITE(d_unit,'(2X,A)') " #outputLayer bias"
+            WRITE(d_unit, format) biases(1,1,nhidlayers+1,i)
+        END DO
+        CLOSE (d_unit)
+    END SUBROUTINE
+
+    SUBROUTINE write_mlff(file)
+        !NOTE: If this is in vasp, we can just copy the file and rewrite the model information
+        USE nnType
+        IMPLICIT NONE
+
+        ! Variables
+        INTEGER :: nelement, nFPs
+        INTEGER :: i, j, k , l
+        INTEGER :: io, file_unit=22
+        CHARACTER(len=20) :: format,mlff_file
+        CHARACTER(len=20),OPTIONAL :: file
+        CHARACTER(len=50) :: line
+        INTEGER,DIMENSION(nelements) :: indices
+        INTEGER,DIMENSION(2,nelements) :: numGs
+
+        IF(PRESENT(file)) THEN
+            IF(LEN(TRIM(file)) .NE. 0) THEN
+                mlff_file = file
+            ELSE
+                mlff_file = 'mlff.pyamff'
+            END IF
+        ELSE
+            mlff_file = 'mlff.pyamff'
+        END IF
+
+        !Probably some better way to format this but this is working so I'll update later
+        OPEN (file_unit, FILE=mlff_file, status='replace')
+        WRITE (file_unit,'(A)') "#Fingerprint type"
+        WRITE (file_unit,'(A)') "BP"
+        WRITE (file_unit,'(A)') "#Rmins"
+        WRITE(format,'(A,I0,A)') "(",nelements,"(2X,A2))" 
+        WRITE (file_unit,format) uniq_elements
+        WRITE(format,'(A,I0,A)') "(",nelements,"(F8.2))" 
+        DO i = 1, nelements
+            WRITE (file_unit,format) rmins(i,:) 
+        END DO
+
+        ! If there is a #Cohesive tag
+        IF (use_cohesive_energy) THEN
+            WRITE(file_unit,'(A)') "#Cohesive"
+            WRITE(format,'(A,I0,A)') "(",nelements,"(2X,A2))"  
+            WRITE(file_unit,'(4X,A)') uniq_elements ! This might be wrong . . . should be coheEl so order might be wrong
+            WRITE(format,'(A,I0,A)') "(",nelements,"(F8.2))" 
+            WRITE(file_unit,format) coheEs
+        END IF
+        ! This is where things get tricky
+        numGs = 0
+        indices = 0
+        DO i=1,nelements
+            numGs(1,i) = fpParas(i)%g1_endpoint - fpParas(i)%g1_startpoint
+            numGs(2,i) = fpParas(i)%tnFPs - numGs(1,i) ! what happens if no G1s?
+        END DO
+
+        IF (SUM(numGs(1,:)) .GT. 0) THEN
+            WRITE(file_unit,'(A)') "#    type   number"
+            WRITE(file_unit, '(6X,A)',advance="no") "G1"
+            WRITE(format,'(A,I0,A)') "(",nelements,"(6X,I0))" 
+            WRITE(file_unit,format) numGs(1,:)
+            WRITE(file_unit,'(A,1X,A,4X,A,7X,A,5X,A,8X,A,14X,A)') "#  center","neighbor","eta","Rs","rcut","fpmin","fpmax"
+
+            DO i=1,nelements
+                IF(numGs(1,i) .GT. 0) THEN
+                    l = 1
+                    DO j=1,nelements
+                        nFPS = fpParas(i)%g1s(j)%nFPS
+                        IF( nFPS .NE. 0) THEN
+                            DO k=1,nFPs !TODO: Save fpParas info so don't need to keep indexing, NOTE: Use ES16.8
+                                WRITE (file_unit,'(2(6X,A2),3(1X,F8.3),2(1X,E18.10))') uniq_elements(i), uniq_elements(j), &
+                                                                        fpParas(i)%g1s(j)%etas(k), fpParas(i)%g1s(j)%rss(k), &
+                                                                        fpParas(i)%g1s(j)%r_cuts(k), fpminvs(l,i), fpmaxvs(l,i)
+                                l = l + 1
+                            END DO
+                        END IF
+                    END DO
+                    indices(i) = l
+                END IF
+            END DO
+        END IF
+
+        IF (SUM(numGs(2,:)) .GT. 0) THEN
+            WRITE(file_unit,'(A)') "#    type   number"
+            WRITE(file_unit, '(6X,A)',advance="no") "G2"
+            WRITE(format,'(A,I0,A)') "(",nelements,"(6X,I0))" 
+            WRITE(file_unit,format) numGs(2,:)
+            WRITE(file_unit,'(A,2(1X,A),3(4X,A),2(4X,A),8X,A,14X,A)') &
+                         "#  center","neighbor1","neighbor2","eta","zeta","lambda","thetas","rcut","fpmin","fpmax"
+            DO i=1,nelements
+                IF(numGs(1,i) .GT. 0) THEN
+                    DO j=1,nelements
+                        DO k=1,nelements ! do I start with 1 or j?
+                            nFPS = fpParas(i)%g2s(j,k)%nFPS
+                            IF( nFPS .NE. 0) THEN
+                                DO l=1,nFPs !NOTE: Use ES16.8 !'(2(6X,A2),3(1X,F8.3),2(1X,E20.12))'
+                                    WRITE (file_unit,'(3(6X,A2),3X,5(1X,F8.3),2(1X,E18.10))') &
+                                                        uniq_elements(i), uniq_elements(j),uniq_elements(k), &
+                                                        fpParas(i)%g2s(j,k)%etas(l), fpParas(i)%g2s(j,k)%zetas(l), &
+                                                        fpParas(i)%g2s(j,k)%lambdas(l), fpParas(i)%g2s(j,k)%theta_ss(l), &
+                                                        fpParas(i)%g2s(j,k)%r_cuts(l), fpminvs(indices(i),i), fpmaxvs(indices(i),i)
+                                                        
+                                    indices(i) = indices(i) + 1
+                                END DO
+                            END IF
+                        END DO
+                    END DO
+                END IF
+            END DO
+        END IF
+
+        WRITE (file_unit,'(A)') "#MachineLearning model type"
+        WRITE (file_unit,'(A)') "atomic-NN"
+        WRITE (file_unit,'(A)') "#Activation function type"
+        WRITE (file_unit,'(A)') actfuncId
+        WRITE(file_unit,'(A)') "#Energy Scaling Parameters"
+        WRITE(file_unit,'(A)') scaler_type
+        WRITE(line,'(F16.8,4X,F16.8)') slope,intercept
+        WRITE(file_unit,'(A,4X,A)') ADJUSTL(TRIM(line)),"#slope  intercept"
+        ! WRITE(file_unit,'(F16.8,1X,F16.8,4X,A)') slope,intercept,"#slope intercept"
+        WRITE(file_unit,'(A)') "#Model Structure"
+        WRITE(file_unit,'(I0)') nhidlayers
+        WRITE(format,'(A,I0,A)') "(",nhidlayers,"(I0,1X))" 
+        WRITE(file_unit,format) nhidneurons
+        WRITE(file_unit,'(A)') "#Model Parameters"
+        ! Write NN parameters
+        DO i = 1, nelements
+            ! Write atom type
+            WRITE (file_unit,'(A)') uniq_elements(i)
+            WRITE(format,'(A)') '(5(4X,ES16.8))' ! per 5
+            ! weights, biases
+            WRITE(file_unit,'(2X,A)') " #inputLayer weight"
+            WRITE(file_unit, format) weights(1:nGs(i),1:nhidneurons(1),1,i) 
+            WRITE(file_unit,'(2X,A)') " #inputLayer bias"
+            WRITE(file_unit,format) biases(1,1:nhidneurons(1),1,i)
+            DO j = 1, nhidlayers-1
+                WRITE(file_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," weight"
+                WRITE(file_unit, format) weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,i) 
+                WRITE(file_unit,'(2X,A,I0,A)') " #hiddenLayer_",j," bias"
+                WRITE(file_unit, format) biases(1,1:nhidneurons(j+1),j+1,i)
+            END DO
+            WRITE(file_unit,'(2X,A)') " #outputLayer weight"
+            WRITE(file_unit, format) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,i)
+            WRITE(file_unit,'(2X,A)') " #outputLayer bias"
+            WRITE(file_unit, format) biases(1,1,nhidlayers+1,i)
+        END DO
+        CLOSE (file_unit)
+    END SUBROUTINE
 END MODULE

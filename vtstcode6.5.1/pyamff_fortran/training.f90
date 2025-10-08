@@ -7,6 +7,7 @@ MODULE training
     USE lossgrad
     USE opts
     USE normalize
+    USE fpCalc, only : update_mlff_model
 
     IMPLICIT NONE
     INTEGER :: global_dft_call =0 
@@ -173,7 +174,7 @@ MODULE training
         !print *, 'line 150 training.f90'
         !TrainImg(img_idx)%calc_dfps(:,1:MAXVAL(num_neigh)+1,:,:)=dfps(:,1:MAXVAL(num_neigh)+1,:,:) !before normalized
 
-  !33    CONTINUE
+      !33    CONTINUE
         
         !Copy not normalized fps/dfps to input_fps/dfps before normalization
         !When fp calc is skipped, it copies not normalized fps to input before
@@ -287,7 +288,7 @@ MODULE training
             !CALL nncleanup_optim
             !print *, 'Training Time: ', finish-start, "seconds"
         END IF
-    !print *, 'END of trainExec +183 training.f90'
+        !print *, 'END of trainExec +183 training.f90'
     END SUBROUTINE
    
     SUBROUTINE Trainer(opt_type,maxepochs,max_nGs,max_hidneurons,uniq_elements,&
@@ -481,8 +482,8 @@ MODULE training
 
     END SUBROUTINE calc_gradnorm
  
-    SUBROUTINE write_mlff(nelement, uniq_elements,num_ml_model)
-    !SUBROUTINE write_mlff(nelement, uniq_elements)
+    SUBROUTINE write_trained_mlff(nelement, uniq_elements,num_ml_model)
+    !SUBROUTINE write_trained_mlff(nelement, uniq_elements)
       !------------------------------------------------------------------------!
       !This is currently temporary format. Only prints out Model parameters    !
       !Eventually this should go to the fingerprints to write the fingerprint  !
@@ -499,7 +500,7 @@ MODULE training
       INTEGER,OPTIONAL :: num_ml_model
       CHARACTER*20 :: file_name
       IF (PRESENT(num_ml_model)) THEN
-         WRITE (file_name,'(A,I0)') 'trained.pyamff',num_ml_model
+         WRITE (file_name,'(A,I0)') 'trained.pyamff.',num_ml_model
       ELSE
          file_name='trained.pyamff'
       END IF
@@ -607,8 +608,15 @@ MODULE training
         IMPLICIT NONE
         CHARACTER(*) :: opt_type
         CHARACTER(2) :: elements
+        CHARACTER(50) :: filename
+        CHARACTER(len=50) :: mlff_file, out_file
         elements = 'Cu'
-        CALL write_mlff(1,elements,global_dft_call)
+        mlff_file = 'mlff.pyamff'
+        out_file = 'trained_mlff.pyamff'
+        WRITE(filename,'(A,I0)') TRIM(ADJUSTL(out_file)) // ".",global_dft_call
+        ! CALL write_trained_mlff(1,elements,global_dft_call)
+        CALL update_mlff_model(mlff_file,out_file)
+        CALL RENAME(out_file,filename)
         global_dft_call =global_dft_call+1
         !CALL nncleanup_atom
         CALL opt_cleanup(opt_type)
