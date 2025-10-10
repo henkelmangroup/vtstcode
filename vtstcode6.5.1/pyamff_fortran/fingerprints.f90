@@ -734,7 +734,7 @@ MODULE fpCalc
         CHARACTER(LEN=30) :: G_type, line
         ! CHARACTER*3, DIMENSION(92) :: elementArray
 
-        INTEGER :: myid
+        INTEGER :: myid, mlff_file_unit=11
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights, flatten_hidweights
         CHARACTER(LEN=30) :: model_type,comment
         CHARACTER*2 :: atom_type
@@ -818,32 +818,32 @@ MODULE fpCalc
         END DO
         !print *, 'line 767 fingerprints.f90'
         !OPEN (11, FILE='mlff.pyamff', status='old')
-        OPEN (11, FILE=mlff_file, status='old')
-        READ (11,*) !skip #Fingerprint type
-        READ (11,*) !fp_type 
-        READ (11,*) !Rmins
-        READ (11,*) uniq_elements
+        OPEN (mlff_file_unit, FILE=mlff_file, status='old')
+        READ (mlff_file_unit,*) !skip #Fingerprint type
+        READ (mlff_file_unit,*) !fp_type 
+        READ (mlff_file_unit,*) !Rmins
+        READ (mlff_file_unit,*) uniq_elements
         !print*, 'reading Rmins'
         DO i = 1, nelement
-            READ (11,*) (rmins(i,j), j = 1, nelement)
+            READ (mlff_file_unit,*) (rmins(i,j), j = 1, nelement)
         END DO
         !print *, 'line 778 fingerprints.f90'
 
         ! If there is a #Cohesive tag
         DO WHILE (line .NE. "#MachineLearning")
-            READ (11,*) line! can be #  type or #Cohesive 
+            READ (mlff_file_unit,*) line! can be #  type or #Cohesive
             IF (line .EQ. "#Cohesive") THEN
                 use_cohesive_energy = .TRUE.
-                READ (11,*) coheElement
-                READ (11,*) temp_coheEs
+                READ (mlff_file_unit,*) coheElement
+                READ (mlff_file_unit,*) temp_coheEs
                 DO m = 1, nelement
                     n = find_loc_char(coheElement, uniq_elements(m), nelement)
                     coheEs(m) = temp_coheEs(n)
                 END DO
-                READ (11,*) line ! skip # type 
+                READ (mlff_file_unit,*) line ! skip # type 
             END IF
             IF (line .EQ. "#MachineLearning") GOTO 40
-            READ (11,*,IOSTAT=ios) G_type, numGs
+            READ (mlff_file_unit,*,IOSTAT=ios) G_type, numGs
             ! If ios == 0, then things are okay
             IF (ios .LT. 0) THEN
                 WRITE(*,*) "End-of-file reached while reading " // TRIM(mlff_file)
@@ -857,12 +857,12 @@ MODULE fpCalc
             IF (G_type .EQ. 'G1') THEN
                 IF (.NOT. haveV1) THEN
                     nG1 = SUM(numGs)
-                    READ (11,*) ! skip # center neighbor ...
+                    READ (mlff_file_unit,*) ! skip # center neighbor ...
                 ELSE
                     nG1 = numGs(1)
                 END IF
                 DO i = 1, nG1
-                    READ (11,*) center, neigh1, djunk, djunk, djunk, djunk, djunk
+                    READ (mlff_file_unit,*) center, neigh1, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
                     nidx = find_loc_char(uniq_elements, neigh1, SIZE(uniq_elements))
                     nGs(cidx) = nGs(cidx) + 1
@@ -874,12 +874,12 @@ MODULE fpCalc
             ELSE IF (G_type .EQ. 'G2') THEN
                 IF (.NOT. haveV1) THEN
                     nG2 = SUM(numGs)
-                    READ (11,*) ! skip # center neighbor ...
+                    READ (mlff_file_unit,*) ! skip # center neighbor ...
                 ELSE
                     nG2 = numGs(1)
                 END IF
                 DO i = 1, nG2
-                    READ (11,*) center, neigh1, neigh2, djunk, djunk, djunk, djunk, djunk, djunk, djunk
+                    READ (mlff_file_unit,*) center, neigh1, neigh2, djunk, djunk, djunk, djunk, djunk, djunk, djunk
                     cidx = find_loc_char(uniq_elements, center, SIZE(uniq_elements))
                     nidx1 = find_loc_char(uniq_elements, neigh1, SIZE(uniq_elements))
                     nidx2 = find_loc_char(uniq_elements, neigh2, SIZE(uniq_elements))
@@ -896,7 +896,7 @@ MODULE fpCalc
         END DO
         !print *, 'line 825 fingerprints.f90'
 
-  40    REWIND 11
+  40    REWIND mlff_file_unit
         MAX_FPs = MAXVAL(tnumGs)
         ALLOCATE(fpminvs(MAX_FPS, nelement))
         ALLOCATE(fpmaxvs(MAX_FPS, nelement))
@@ -939,12 +939,12 @@ MODULE fpCalc
         END DO
         !print *, 'line 868 fingerprints.f90'
 
-        READ (11,*) !skip #Fingerprint type
-        READ (11,*) !fp_type 
-        READ (11,*) !Rmins
-        READ (11,*) !element type
+        READ (mlff_file_unit,*) !skip #Fingerprint type
+        READ (mlff_file_unit,*) !fp_type
+        READ (mlff_file_unit,*) !Rmins
+        READ (mlff_file_unit,*) !element type
         DO i = 1, nelement
-            READ (11,*)  !Rmins
+            READ (mlff_file_unit,*)  !Rmins
         END DO
         !print *, 'line 877 fingerprints.f90'
 
@@ -953,23 +953,23 @@ MODULE fpCalc
          ! read the cohesive energies to the array
 
          !print*, 'reading g1'
-        READ (11,*) line ! can be #  type or #Cohesive
+        READ (mlff_file_unit,*) line ! can be #  type or #Cohesive
         !print *, 'line 885 fingerprints.f90'
 
         IF (line .EQ. "#Cohesive") THEN
-            READ (11,*)
-            READ (11,*)
-            READ (11,*) !skip # type
+            READ (mlff_file_unit,*)
+            READ (mlff_file_unit,*)
+            READ (mlff_file_unit,*) !skip # type
         END IF
         IF (.NOT. haveV1) THEN
-            READ (11,*) G_type, numGs
+            READ (mlff_file_unit,*) G_type, numGs
         ELSE
-            READ(11,*) G_type, numGs(1)
+            READ(mlff_file_unit,*) G_type, numGs(1)
         END IF
         IF (nG1 .GT. 0) THEN
-            READ (11,*) !skip center ...
+            READ (mlff_file_unit,*) !skip center ...
             DO i = 1, nG1
-                READ (11,*) center, neigh1, eta, Rs, rcut, fpmin, fpmax
+                READ (mlff_file_unit,*) center, neigh1, eta, Rs, rcut, fpmin, fpmax
                 ! ideally have dynamic rcut for different interactions
                 IF (rcut .GT. max_rcut) THEN
                     IF (max_rcut > 0.d0) THEN
@@ -1009,11 +1009,11 @@ MODULE fpCalc
 
         IF (nG2 .GT. 0) THEN
             IF (nG1 .GT. 0) THEN
-                READ (11,*) !skip type ...
+                READ (mlff_file_unit,*) !skip type ...
                 IF (.NOT. haveV1) THEN
-                    READ (11,*) G_type, numGs
+                    READ (mlff_file_unit,*) G_type, numGs
                 ELSE
-                    READ (11,*) G_type, numGs(1)
+                    READ (mlff_file_unit,*) G_type, numGs(1)
                 END IF
             ELSE
                 CONTINUE
@@ -1025,9 +1025,9 @@ MODULE fpCalc
                 fpParas(k)%g1_endpoint = fpParas(k)%tnFPs
                 fpParas(k)%g2_startpoint = fpParas(k)%g1_endpoint + 1
             END DO
-            READ (11,*) !skip # center...
+            READ (mlff_file_unit,*) !skip # center...
             DO i = 1, nG2
-                READ (11,*) center, neigh1, neigh2, eta, zeta, lambda, thetas, rcut, fpmin, fpmax
+                READ (mlff_file_unit,*) center, neigh1, neigh2, eta, zeta, lambda, thetas, rcut, fpmin, fpmax
                 ! ideally have dynamic rcut for different interactions
                 IF (rcut .GT. max_rcut) THEN
                     IF (max_rcut > 0.d0) THEN
@@ -1120,28 +1120,28 @@ MODULE fpCalc
 
         ! Read weights and biases
         DO WHILE (line .NE. "#MachineLearning")
-            READ (11,*) line
+            READ (mlff_file_unit,*) line
         ENDDO
-        READ (11,*) model_type
-        READ (11,*) !Skip #Activation function type
-        READ (11,*) actfuncId
-        !2025-02 changed so that weights and biases are at the end 
-        READ (11,*) comment
+        READ (mlff_file_unit,*) model_type
+        READ (mlff_file_unit,*) !Skip #Activation function type
+        READ (mlff_file_unit,*) actfuncId
+        !2025-02 changed so that weights and biases are at the end
+        READ (mlff_file_unit,*) comment
         IF ((comment(:6) .EQ. "#Model") .AND. (.NOT. haveV1)) THEN
             WRITE(*,*) "WARNING: V2 of mlff.pyamff detected. A new mlff.pyamff will be generated."
             haveV2 = .TRUE.
         END IF
         IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) THEN
-            READ (11,*) scaler_type
-            READ (11,*) slope, intercept
-            READ (11,*) !Skip command line
+            READ (mlff_file_unit,*) scaler_type
+            READ (mlff_file_unit,*) slope, intercept
+            READ (mlff_file_unit,*) !Skip command line
         END IF
-        READ (11,*) nhidlayers
-        IF(ALLOCATED(nhidneurons)) THEN 
+        READ (mlff_file_unit,*) nhidlayers
+        IF(ALLOCATED(nhidneurons)) THEN
           DEALLOCATE(nhidneurons)
         END IF
         ALLOCATE(nhidneurons(nhidlayers))
-        READ (11,*) nhidneurons
+        READ (mlff_file_unit,*) nhidneurons
         IF(ALLOCATED(flatten_inweights)) THEN
           DEALLOCATE(flatten_inweights)
         END IF
@@ -1160,18 +1160,18 @@ MODULE fpCalc
         ALLOCATE(flatten_hidweights(MAXVAL(nhidneurons)*MAXVAL(nhidneurons)))
         ALLOCATE(weights(max(MAXVAL(nGs),MAXVAL(nhidneurons)),MAXVAL(nhidneurons),nhidlayers+1,nelements))
         ALLOCATE(biases(1,MAXVAL(nhidneurons),nhidlayers+1,nelements))
-        READ (11,*) !Skip #Model structure
+        READ (mlff_file_unit,*) !Skip #Model structure
         !print *, 'line 1074 fingerprints.f90'
 
         DO i = 1, nelements
             ! Read atom type skipping the first symbol #.
-            READ (11,*) atom_type
+            READ (mlff_file_unit,*) atom_type
             ! Find index of corresponding atom_type
             myid=find_loc_char(uniq_elements, atom_type, SIZE(uniq_elements))
             ! Input weights, biases
-            IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !inputLayer weights tag
+            IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !inputLayer weights tag
             !print*, 'myid ', myid, nGs(myid)*nhidneurons(1)
-            READ (11,*,IOSTAT=ios) flatten_inweights(1:nGs(myid)*nhidneurons(1))
+            READ (mlff_file_unit,*,IOSTAT=ios) flatten_inweights(1:nGs(myid)*nhidneurons(1))
             IF (ios .EQ. 59) THEN ! 59 is if have "#Energy Scaling Parameters"
                 haveV2_noparams = .TRUE.
                 CALL initialize_NN_params(uniq_elements, seedval)
@@ -1180,41 +1180,41 @@ MODULE fpCalc
             ELSE IF (ios .EQ. 0) THEN
                 weights(1:nGs(myid),1:nhidneurons(1),1,myid) = &
                     reshape(flatten_inweights(1:nGs(myid)*nhidneurons(1)),(/nGs(myid),nhidneurons(1)/))
-                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !inputLayer bias tag
-                READ (11,*) biases(1,1:nhidneurons(1),1,myid)
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !inputLayer bias tag
+                READ (mlff_file_unit,*) biases(1,1:nhidneurons(1),1,myid)
                 ! Hidden weights, biases
                 DO j = 1, nhidlayers-1
-                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !hiddenLayer weights tag
-                    READ (11,*) flatten_hidweights(1:nhidneurons(j)*nhidneurons(j+1))
+                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !hiddenLayer weights tag
+                    READ (mlff_file_unit,*) flatten_hidweights(1:nhidneurons(j)*nhidneurons(j+1))
                     weights(1:nhidneurons(j),1:nhidneurons(j+1),j+1,myid) = &
                         reshape(flatten_hidweights(1:nhidneurons(j)*nhidneurons(j+1)),(/nhidneurons(j), nhidneurons(j+1)/))
-                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !hiddenLayer bias tag
-                    READ (11,*) biases(1,1:nhidneurons(j+1),j+1,myid)
+                    IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !hiddenLayer bias tag
+                    READ (mlff_file_unit,*) biases(1,1:nhidneurons(j+1),j+1,myid)
                 END DO
                 ! Out weights, biases
-                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !outputLayer weights tag
-                READ (11,*) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,myid)
-                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (11,*) !outputLayer bias tag
-                READ (11,*) biases(1,1,nhidlayers+1,myid)
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !outputLayer weights tag
+                READ (mlff_file_unit,*) weights(1:nhidneurons(nhidlayers),1,nhidlayers+1,myid)
+                IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !outputLayer bias tag
+                READ (mlff_file_unit,*) biases(1,1,nhidlayers+1,myid)
                 !!! IF (i ==  nelements) READ (11,*) !
             ELSE
                 WRITE(*,'(A,I4,A)') "Error (",ios,") while reading in weights and biases from '" // TRIM(ADJUSTL(mlff_file)) // "'"
-                CLOSE(11)
+                CLOSE(mlff_file_unit)
                 STOP
             END IF
         END DO
         IF (haveV2 .OR. haveV1) THEN
-            IF (.NOT. haveV2_noparams) READ (11,*) ! skip command
-            READ (11,*) scaler_type
-            READ (11,*) slope, intercept
-            CLOSE(11)
+            IF (.NOT. haveV2_noparams) READ (mlff_file_unit,*) ! skip command
+            READ (mlff_file_unit,*) scaler_type
+            READ (mlff_file_unit,*) slope, intercept
+            CLOSE(mlff_file_unit)
             IF (haveV2) CALL update_mlff(mlff_file)
             IF (haveV1) THEN 
                 CALL RENAME(TRIM(mlff_file),TRIM(ADJUSTL(mlff_file)) // ".v1")
                 CALL write_mlff(mlff_file)
             END IF
         ELSE
-            CLOSE (11)
+            CLOSE (mlff_file_unit)
         END IF
 
     END SUBROUTINE
