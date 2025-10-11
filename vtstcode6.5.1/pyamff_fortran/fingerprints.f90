@@ -421,6 +421,7 @@ MODULE fpCalc
                 END DO
             END DO
         END DO
+        WRITE(*,*) 'Reading fingerprint parameters from THE mlff.pyamff'
         OPEN (11, FILE='mlff.pyamff', status='old')
         !print*, 'reading mlparas'
         READ (11,*) !skip #Fingerprint type
@@ -733,8 +734,7 @@ MODULE fpCalc
         CHARACTER*20 :: mlff_file
         CHARACTER(LEN=30) :: G_type, line
         ! CHARACTER*3, DIMENSION(92) :: elementArray
-
-        INTEGER :: myid, mlff_file_unit=11
+        INTEGER :: myid, mlff_file_unit=44
         DOUBLE PRECISION, DIMENSION(:), ALLOCATABLE :: flatten_inweights, flatten_hidweights
         CHARACTER(LEN=30) :: model_type,comment
         CHARACTER*2 :: atom_type
@@ -818,7 +818,11 @@ MODULE fpCalc
         END DO
         !print *, 'line 767 fingerprints.f90'
         !OPEN (11, FILE='mlff.pyamff', status='old')
-        OPEN (mlff_file_unit, FILE=mlff_file, status='old')
+        OPEN (newunit=mlff_file_unit, FILE=mlff_file, status='old',action='read',iostat=ios)
+        IF (ios .NE. 0) THEN
+            WRITE(*,*) "Error opening file: ", TRIM(mlff_file)
+            STOP
+        END IF
         READ (mlff_file_unit,*) !skip #Fingerprint type
         READ (mlff_file_unit,*) !fp_type 
         READ (mlff_file_unit,*) !Rmins
@@ -1172,7 +1176,7 @@ MODULE fpCalc
             IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !inputLayer weights tag
             !print*, 'myid ', myid, nGs(myid)*nhidneurons(1)
             READ (mlff_file_unit,*,IOSTAT=ios) flatten_inweights(1:nGs(myid)*nhidneurons(1))
-            IF (ios .EQ. 59) THEN ! 59 is if have "#Energy Scaling Parameters"
+            IF (ios .GT. 0) THEN ! 59 (intel) or 225 (nvidia) is if have "#Energy Scaling Parameters"
                 haveV2_noparams = .TRUE.
                 CALL initialize_NN_params(uniq_elements, seedval)
             ELSE IF (ios .LT. 0) THEN ! EOF
@@ -1197,10 +1201,10 @@ MODULE fpCalc
                 IF ((.NOT. haveV2) .AND. (.NOT. haveV1)) READ (mlff_file_unit,*) !outputLayer bias tag
                 READ (mlff_file_unit,*) biases(1,1,nhidlayers+1,myid)
                 !!! IF (i ==  nelements) READ (11,*) !
-            ELSE
-                WRITE(*,'(A,I4,A)') "Error (",ios,") while reading in weights and biases from '" // TRIM(ADJUSTL(mlff_file)) // "'"
-                CLOSE(mlff_file_unit)
-                STOP
+            ! ELSE
+            !     WRITE(*,'(A,I4,A)') "Error (",ios,") while reading in weights and biases from '" // TRIM(ADJUSTL(mlff_file)) // "'"
+            !     CLOSE(mlff_file_unit)
+            !     STOP
             END IF
         END DO
         IF (haveV2 .OR. haveV1) THEN
@@ -2101,6 +2105,7 @@ MODULE fpCalc
             mlff_file = 'mlff.pyamff'
         END IF
         out_file = mlff_file
+
         CALL RENAME(TRIM(mlff_file),TRIM(ADJUSTL(mlff_file)) // ".v2")
         mlff_file = TRIM(ADJUSTL(mlff_file)) // ".v2"
         OPEN (newunit=s_unit, file=mlff_file, status='old',action='read',iostat=io)
@@ -2171,6 +2176,7 @@ MODULE fpCalc
         CHARACTER(len=50) :: line
         INTEGER,DIMENSION(nelements) :: indices
         INTEGER,DIMENSION(2,nelements) :: numGs
+
 
         IF(PRESENT(file)) THEN
             IF(LEN(TRIM(file)) .NE. 0) THEN

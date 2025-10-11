@@ -481,22 +481,28 @@ MODULE neuralnetwork
       DOUBLE PRECISION, DIMENSION(total_natoms,max_nGs) :: dEdGs
       DOUBLE PRECISION, DIMENSION(max_natoms_arr,max_hidneurons,nhidlayers+1,nelements) ::fps, fps2
       LOGICAL, OPTIONAL :: store
-      !print *, 'line 483 nn.f90'
+      LOGICAL :: continue
+    !   print *, 'line 483 nn.f90'
       !print *, 'total_natoms: ',total_natoms
       !print *, 'image_idx: ',img_idx
       Etotal = 0.d0
       forces = 0.d0 
       ! Store input_fps of multiple images in memory for training and assign values required for training when epoch=1
       !print *, 'forward neuralnetwork.f90 line 161'
-      !print *, 'curr_epoch: ',curr_epoch
+    !   print *, 'curr_epoch: ',curr_epoch
       !store = .FALSE.
-      IF (curr_epoch < 1 .AND. (PRESENT(store) .AND. store)) THEN 
+      IF (PRESENT(store)) THEN
+          continue = store
+      ELSE
+          continue = .FALSE.
+      END IF
+      IF (curr_epoch < 1 .AND. continue) THEN 
           IF ((energy_training .EQV. .TRUE.) .OR. (force_training .EQV. .TRUE.)) THEN
               !input_fps(:,:,:,img_idx)=ordered_fps
               input_fps(:,:,:,img_idx)=ordered_fps
               natomsE(img_idx)=total_natoms
           END IF
-          !print *, 'line 169 nn.f90'
+        !   print *, 'line 169 nn.f90'
           ! Store input_dfps of multiple images in memory for training and assign values required for force training
           !print *, 'force_training: ',force_training
           IF (force_training .EQV. .TRUE.) THEN
@@ -535,7 +541,7 @@ MODULE neuralnetwork
               neighborlists_img(:,1:max_nneighbors,img_idx)=neighborlists
           END IF
       END IF  
-      !print *, 'line 523 nn.f90'
+    !   print *, 'line 523 nn.f90'
       DO i = 1, nelements
           ! input to 1st hidden layer
           fps(1:natoms_arr(i),1:nhidneurons(1),1,i) = actfunc(&
@@ -559,7 +565,7 @@ MODULE neuralnetwork
               grad(fps(1:natoms_arr(i),1:nhidneurons(1),1,i),in_weights(1:nGs(i),1:nhidneurons(1),i), &
               natoms_arr(i),nGs(i),nhidneurons(1))
           END IF
-          !print *, 'line 562 nn.f90'
+        !   print *, 'line 562 nn.f90'
           !If force training is true 
           IF (force_training .EQV. .TRUE.) THEN
               IF (curr_epoch < 1) THEN

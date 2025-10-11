@@ -30,12 +30,13 @@ MODULE training
         !print *,'line 29 training.f90'
         ! Try opening the input filename 
         OPEN(55, FILE=filename, STATUS='old', IOSTAT=istat)
+        CLOSE(55)
         IF (istat == 6 .OR. istat == 29) THEN 
             !If file open is failed, load deafult fingerprints  
             !PRINT *, 'Warning: PyAMFF cannot find the input file, ',filename, &
             !', specified in INCAR. Hence default fpParas will be used!'
             !CALL load_default_mlff(nelement, max_fps, uniqElems, seedval)
-            print *, 'Error: Input file missing! Current version requires an input file,', filename 
+            WRITE(*,*), 'Error: Input file missing! Current version requires an input file,', filename 
             STOP
         ! Input file (filename) is found 
         ELSE
@@ -43,10 +44,10 @@ MODULE training
           !print *, 'line 42 training.f90' 
           CALL read_mlff(nelement, filename) !read_mlff(nelement, max_fps, filename, seedval)
         END IF
-        !print *, 'line 45 training.f90'
+        ! print *, 'line 45 training.f90'
         !backward initiation
         CALL init_backward
-        !print *, 'line 48 END of train_init training.f90'
+        ! print *, 'line 48 END of train_init training.f90'
     END SUBROUTINE
 
     SUBROUTINE trainExec(nAtoms,pos_car,cell,symbols,nelement,uniq_elements,&
@@ -108,9 +109,9 @@ MODULE training
         !                 nneigh_incell, neighs_incell, num_neigh, num_cells, neighsDefined)
         !
         
-        !print *, 'line 108 training.f90'
+        ! print *, 'line 113 training.f90'
         CALL calcfps(nAtoms, pos_car, cell, symbols, nelement, forceEngine, sub_num_neigh,neighs, num_neigh)
-        !print *, 'line 110 training.f90'
+        ! print *, 'line 115 training.f90'
         !CALL calcfps(nAtoms, pos_car, cell, symbols, maxfps, nelement, forceEngine, &fps, temp_dfps, neighs, num_neigh)
         !print *, 'supersymbols: ',supersymbols
         
@@ -138,12 +139,12 @@ MODULE training
         !print *, 'symbols in training.f90 before normalizeParas: ',symbols
         !!!CALL normalizeParas(nelement) !!! original 
         CALL update_atomInfo(nAtoms,nelement,MAX_FPS,symbols,TrainImg(img_idx)%natoms_arr)
-        !print *, 'line 141 training.f90'
+        ! print *, 'line 143 training.f90'
         !print*, 'atom_idx line 141  training.f90: ',atom_idx
         CALL normalizeFPs(nelement,nAtoms,uniq_elements,maxfps,&
         MAXVAL(TrainImg(img_idx)%nneighbors),&
         TrainImg(img_idx)%nneighbors,TrainImg(img_idx)%neighborlists(:,1:MAXVAL(TrainImg(img_idx)%nneighbors)))
-        !print *, 'atom_idx line 144  training.f90: ',atom_idx
+        ! print *, 'atom_idx line 144  training.f90: ',atom_idx
         TrainImg(img_idx)%atom_idx = atom_idx
         DO i=1,nelement
             !DO j=1,natoms_arr(i) !orignal
@@ -159,7 +160,7 @@ MODULE training
         ALLOCATE(TrainImg(img_idx)%supersymbols(tnAtoms))
         
         TrainImg(img_idx)%supersymbols=supersymbols
-        !print *, 'line 152 training.f90'
+        ! print *, 'line 152 training.f90'
         !Store ordered fps and dfps in TrainImg
         !Cleanup the ghost parts
         CALL atomsCleanup
@@ -171,7 +172,7 @@ MODULE training
         !    DEALLOCATE (TrainImg(img_idx)%atom_idx)
         !END IF
         !ALLOCATE (TrainImg(img_idx)%atom_idx(nelement))
-        !print *, 'line 150 training.f90'
+        ! print *, 'line 150 training.f90'
         !TrainImg(img_idx)%calc_dfps(:,1:MAXVAL(num_neigh)+1,:,:)=dfps(:,1:MAXVAL(num_neigh)+1,:,:) !before normalized
 
       !33    CONTINUE
@@ -218,7 +219,7 @@ MODULE training
               END IF
               ALLOCATE(supersymbols(trainImg(img)%tnAtoms))
               supersymbols = trainImg(img)%supersymbols
-              !print*, 'line 213 training.f90'
+              ! print*, 'line 213 training.f90'
               CALL allocate_outputs(trainImg(img)%nAtoms,maxfps,MAXVAL(trainImg(img)%nneighbors))
               !!!
               !fps = TrainImg(img)%input_fps
@@ -227,13 +228,13 @@ MODULE training
               !!MAXVAL(TrainImg(img)%nneighbors),&
               !TrainImg(img)%nneighbors,TrainImg(img)%neighborlists(:,1:MAXVAL(TrainImg(img)%nneighbors)))
               !print*, 'line 217 training.f90 atom_idx: ',atom_idx
-              !print *,'line 214'
+              ! print *,'line 214'
               !print *, 'line 215 nAtimg_ptr: in training.f90 ', nAtimg_ptr
               !print*, 'line 223 training.f90 atom_idx: ',atom_idx
               CALL forward(trainImg(img)%nneighbors,MAXVAL(trainImg(img)%nneighbors),&
               trainImg(img)%neighborlists(:,1:MAXVAL(TrainImg(img)%nneighbors)),&
               TrainImg(img)%input_fps, MAXVAL(nGs), MAXVAL(TrainImg(img)%natoms_arr), MAXVAL(nhidneurons))
-              !print *, 'line 218'
+              ! print *, 'line 218'
 
               !CALL forward_old(TrainImg(img)%nneighbors,MAXVAL(TrainImg(img)%nneighbors),&
               !TrainImg(img)%neighborlists(:,1:MAXVAL(TrainImg(img)%nneighbors)),&
@@ -613,6 +614,7 @@ MODULE training
         elements = 'Cu'
         mlff_file = 'mlff.pyamff'
         out_file = 'trained_mlff.pyamff'
+        ! do we want to save to a folder?
         WRITE(filename,'(A,I0)') TRIM(ADJUSTL(out_file)) // ".",global_dft_call
         ! CALL write_trained_mlff(1,elements,global_dft_call)
         CALL update_mlff_model(mlff_file,out_file)
