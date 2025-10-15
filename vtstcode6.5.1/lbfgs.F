@@ -148,6 +148,7 @@
                ENDIF
 
                rho(itr) = 1.0_q/SUM(change_in_G(itr,:,:,:)*change_in_R(itr,:,:,:))
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ',itr,rho(itr)
              ELSE
                IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, shifting vectors'
                DO im = 1, memory-1
@@ -162,8 +163,8 @@
                  CALL set_pbc(change_in_R(memory,:,:,im))
                ENDDO
                rho(memory) = 1.0_q/SUM(change_in_G(memory,:,:,:)*change_in_R(memory,:,:,:))
+               IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, memory, rho: ',memory,rho(memory)
              ENDIF
-             IF (iu6>0) WRITE(iu6,*) 'OPT: LBFGS, itr, rho: ',itr,rho(itr)
           ENDIF
 
           Rold = R
