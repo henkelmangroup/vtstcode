@@ -119,6 +119,7 @@
         U0 = U
         R0 = R
         F0 = F
+        CGInitFlag = .TRUE.
         F0r = SQRT(SUM(F0**2))
         IF (IU6>=0) WRITE(IU6,'(A)') ' Dimer: Central Point'
         IF (IU6>=0) WRITE(IU6,'(A,F14.6,/)') ' Dimer: F0', F0r
@@ -285,6 +286,9 @@
           FNold = FN
           GN = FN
         END IF
+
+        IF (IU6>=0) WRITE(IU6,'(A,F14.6)') ' Dimer: Norm of FNold = ', SQRT(SUM(FNold*FNold))
+
         a1 = ABS(SUM(FN*FNold))
         a2 = SUM(FNold*FNold)
         IF ((a1<=0.5_q*a2) .AND. (a2/=0._q)) THEN
@@ -310,9 +314,10 @@
         IF (IU6>=0) THEN
           WRITE(IU6,'(A,F14.6,/)') ' Dimer: FN1',FN1
         END IF
-        ! Save variables for printing
+        ! Save variables for printing. SAVED FNold
         CN1 = CN
         FN1r = FNr
+        FNold = FN
       ELSE
         IF (IU6>=0) WRITE(IU6,*) 'Dimer: Rotation'
         RotNum = RotNum + 1
@@ -328,6 +333,7 @@
         CALL SetUnit(N)
         R = R0 + N*dR
         FdStep = .TRUE.
+        
         IF (IU6>=0) THEN
           WRITE(IU6,'(A,F14.6)') ' Dimer: FN2', FN2
           WRITE(IU6,'(A,F14.6,/)') ' Dimer: Th ', Th*180._q/PI
